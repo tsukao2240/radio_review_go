@@ -51,8 +51,8 @@ func NewBroadcastHandler(
 // ---- ヘルパ ----
 
 // renderTemplate はテンプレートを描画する。base.html を含めてパースし "base" テンプレートを実行する。
-func renderTemplate(w http.ResponseWriter, tmplPath string, data interface{}) {
-	RenderWithBase(w, tmplPath, data)
+func renderTemplate(w http.ResponseWriter, r *http.Request, tmplPath string, data interface{}) {
+	RenderWithBase(w, r, tmplPath, data)
 }
 
 // respondJSON は JSON レスポンスを返す共通ヘルパー
@@ -76,9 +76,9 @@ func (h *BroadcastHandler) GetCurrentSchedule(w http.ResponseWriter, r *http.Req
 	}
 
 	data := map[string]interface{}{
-		"results": results,
+		"Results": results,
 	}
-	renderTemplate(w, "web/templates/radioprogram/recent_schedule.html", data)
+	renderTemplate(w, r, "web/templates/radioprogram/recent_schedule.html", data)
 }
 
 // GetWeeklySchedule は指定放送局の週間番組表を返す
@@ -98,15 +98,17 @@ func (h *BroadcastHandler) GetWeeklySchedule(w http.ResponseWriter, r *http.Requ
 	}
 
 	data := map[string]interface{}{
-		"schedule":   schedule,
-		"station_id": stationID,
+		"BroadcastName": "",
+		"Entries":       []map[string]interface{}{},
+		"ThisWeek":      []string{},
 	}
 	if len(schedule) > 0 {
-		for k, v := range schedule[0] {
-			data[k] = v
-		}
+		item := schedule[0]
+		data["BroadcastName"] = item["broadcast_name"]
+		data["Entries"] = item["entries"]
+		data["ThisWeek"] = item["thisWeek"]
 	}
-	renderTemplate(w, "web/templates/radioprogram/weekly_schedule.html", data)
+	renderTemplate(w, r, "web/templates/radioprogram/weekly_schedule.html", data)
 }
 
 // GetTwoWeekScheduleSelect は2週間番組表の放送局選択画面を返す
@@ -124,11 +126,11 @@ func (h *BroadcastHandler) GetTwoWeekScheduleSelect(w http.ResponseWriter, r *ht
 	}
 
 	data := map[string]interface{}{
-		"stations":     stations,
-		"areas":        getAreaList(),
-		"selectedArea": areaID,
+		"Stations":     stations,
+		"Areas":        getAreaList(),
+		"SelectedArea": areaID,
 	}
-	renderTemplate(w, "web/templates/radioprogram/twoweek_select.html", data)
+	renderTemplate(w, r, "web/templates/radioprogram/twoweek_select.html", data)
 }
 
 // GetTwoWeekScheduleByStation は指定放送局の2週間番組表を返す
@@ -152,16 +154,30 @@ func (h *BroadcastHandler) GetTwoWeekScheduleByStation(w http.ResponseWriter, r 
 	}
 
 	data := map[string]interface{}{
-		"schedule":     schedule,
-		"station_id":   stationID,
-		"selectedArea": areaID,
+		"BroadcastName": "",
+		"Entries":       []map[string]interface{}{},
+		"Dates":         []string{},
+		"SelectedArea":  areaID,
 	}
 	if len(schedule) > 0 {
-		for k, v := range schedule[0] {
-			data[k] = v
+		item := schedule[0]
+		data["BroadcastName"] = item["broadcast_name"]
+		entries, _ := item["entries"].([]map[string]interface{})
+		data["Entries"] = entries
+		// 日付一覧を entries から収集
+		dateSet := map[string]struct{}{}
+		for _, e := range entries {
+			if d, ok := e["date"].(string); ok && d != "" {
+				dateSet[d] = struct{}{}
+			}
 		}
+		dates := make([]string, 0, len(dateSet))
+		for d := range dateSet {
+			dates = append(dates, d)
+		}
+		data["Dates"] = dates
 	}
-	renderTemplate(w, "web/templates/radioprogram/twoweek_schedule.html", data)
+	renderTemplate(w, r, "web/templates/radioprogram/twoweek_schedule.html", data)
 }
 
 // ShowProgramDetail は番組詳細を返す
@@ -183,11 +199,10 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 	}
 
 	data := map[string]interface{}{
-		"detail":     detail,
-		"station_id": stationID,
-		"title":      title,
+		"Entries":         []map[string]interface{}{detail},
+		"LatestBroadcast": detail["date"],
 	}
-	renderTemplate(w, "web/templates/radioprogram/detail.html", data)
+	renderTemplate(w, r, "web/templates/radioprogram/detail.html", data)
 }
 
 // Search は番組検索を行う
@@ -211,15 +226,16 @@ func (h *BroadcastHandler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"keyword":    keyword,
-		"cast":       cast,
-		"station_id": stationIDParam,
-		"programs":   nil,
+		"Keyword":    keyword,
+		"Cast":       cast,
+		"StationID":  stationIDParam,
+		"Results":    nil,
+		"Total":      0,
 	}
 
 	// どちらのパラメータもない場合はフォームのみ表示
 	if keywordPtr == nil && castPtr == nil {
-		renderTemplate(w, "web/templates/search/index.html", data)
+		renderTemplate(w, r, "web/templates/search/index.html", data)
 		return
 	}
 
@@ -230,8 +246,9 @@ func (h *BroadcastHandler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data["programs"] = programs
-	renderTemplate(w, "web/templates/search/index.html", data)
+	data["Results"] = programs
+	data["Total"] = len(programs)
+	renderTemplate(w, r, "web/templates/search/index.html", data)
 }
 
 // ---- 内部ヘルパー（放送局リスト・エリアリスト） ----

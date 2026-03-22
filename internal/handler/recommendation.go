@@ -42,7 +42,7 @@ func (h *RecommendationHandler) Index(w http.ResponseWriter, r *http.Request) {
 		trending = []map[string]interface{}{}
 	}
 
-	renderOrJSON(w, "web/templates/recommendations/index.html", map[string]interface{}{
+	renderOrJSON(w, r, "web/templates/recommendations/index.html", map[string]interface{}{
 		"Recommendations": recommendations,
 		"Trending":        trending,
 	})

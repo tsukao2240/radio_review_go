@@ -38,8 +38,8 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderOrJSON(w, "web/templates/favorite/index.html", map[string]interface{}{
-		"favorites": favs,
+	renderOrJSON(w, r, "web/templates/favorite/index.html", map[string]interface{}{
+		"Favorites": favs,
 	})
 }
 

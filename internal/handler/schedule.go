@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"html/template"
 	"net/http"
 	"strconv"
 
@@ -45,25 +44,9 @@ func (h *ScheduleHandler) Index(w http.ResponseWriter, r *http.Request) {
 		schedules = []model.RecordingSchedule{}
 	}
 
-	tmpl, tmplErr := template.ParseFiles(
-		"web/templates/layouts/base.html",
-		"web/templates/recording/schedules.html",
-	)
-	if tmplErr != nil {
-		writeError(w, http.StatusInternalServerError, "テンプレートのパースに失敗しました: "+tmplErr.Error())
-		return
-	}
-
-	data := TemplateData{
-		Data: map[string]interface{}{
-			"Schedules": schedules,
-		},
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "base", data); err != nil {
-		writeError(w, http.StatusInternalServerError, "テンプレートのレンダリングに失敗しました: "+err.Error())
-	}
+	RenderWithBase(w, r, "web/templates/recording/schedules.html", map[string]interface{}{
+		"Schedules": schedules,
+	})
 }
 
 // Store は POST /recording/schedule を処理する。

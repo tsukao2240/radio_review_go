@@ -28,7 +28,7 @@ func NewAuthHandler(userRepo repository.UserRepositoryInterface, store sessions.
 // ShowLogin は GET /login を処理する。
 // ログインフォームの HTML テンプレートを返す。
 func (h *AuthHandler) ShowLogin(w http.ResponseWriter, r *http.Request) {
-	RenderWithBase(w, "web/templates/auth/login.html", nil)
+	RenderWithBase(w, r, "web/templates/auth/login.html", nil)
 }
 
 // Login は POST /login を処理する。
@@ -91,7 +91,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // ShowRegister は GET /register を処理する。
 // ユーザー登録フォームの HTML テンプレートを返す。
 func (h *AuthHandler) ShowRegister(w http.ResponseWriter, r *http.Request) {
-	RenderWithBase(w, "web/templates/auth/register.html", nil)
+	RenderWithBase(w, r, "web/templates/auth/register.html", nil)
 }
 
 // Register は POST /register を処理する。

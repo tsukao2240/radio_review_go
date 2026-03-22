@@ -172,8 +172,8 @@ func TestBroadcastHandlerSearch(t *testing.T) {
 			if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
 				t.Fatalf("decode JSON: %v", err)
 			}
-			if result["keyword"] != "jazz" {
-				t.Errorf("keyword in response: %v", result["keyword"])
+			if result["Keyword"] != "jazz" {
+				t.Errorf("keyword in response: %v", result["Keyword"])
 			}
 		}
 	})

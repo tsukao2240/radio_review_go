@@ -3,4 +3,4 @@ bin/
 storage/recordings/
 storage/keys/
 *.log
-server
+/server

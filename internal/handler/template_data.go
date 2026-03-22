@@ -21,9 +21,13 @@ type TemplateData struct {
 	Flash     string      // フラッシュメッセージ
 }
 
+// ResolveUser はリクエストからログインユーザーを取得するための注入可能な関数。
+// main.go で初期化される。
+var ResolveUser func(r *http.Request) *model.User
+
 // RenderWithBase は base.html + tmplPath を ParseFiles して "base" テンプレートを実行する。
 // テンプレートファイルが存在しない場合は JSON にフォールバックする。
-func RenderWithBase(w http.ResponseWriter, tmplPath string, data interface{}) {
+func RenderWithBase(w http.ResponseWriter, r *http.Request, tmplPath string, data interface{}) {
 	if _, err := os.Stat(tmplPath); os.IsNotExist(err) {
 		w.Header().Set("Content-Type", "application/json")
 		if encErr := json.NewEncoder(w).Encode(data); encErr != nil {
@@ -39,8 +43,17 @@ func RenderWithBase(w http.ResponseWriter, tmplPath string, data interface{}) {
 		return
 	}
 
+	var user *model.User
+	if ResolveUser != nil {
+		user = ResolveUser(r)
+	}
+
+	td := TemplateData{
+		User: user,
+		Data: data,
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := t.ExecuteTemplate(w, "base", data); err != nil {
+	if err := t.ExecuteTemplate(w, "base", td); err != nil {
 		log.Printf("RenderWithBase ExecuteTemplate error (%s): %v", tmplPath, err)
 	}
 }

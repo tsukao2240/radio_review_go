@@ -21,6 +21,7 @@ import (
 	"github.com/yourname/radio_review_go/internal/handler"
 	"github.com/yourname/radio_review_go/internal/job"
 	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
+	"github.com/yourname/radio_review_go/internal/model"
 	"github.com/yourname/radio_review_go/internal/repository"
 	"github.com/yourname/radio_review_go/internal/service"
 	"github.com/yourname/radio_review_go/pkg/radiko"
@@ -102,6 +103,27 @@ func main() {
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
 	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
 
+	// --- ユーザー解決関数の登録 (RenderWithBase でナビに使用) ---
+	handler.ResolveUser = func(r *http.Request) *model.User {
+		session, err := store.Get(r, "radio_review_session")
+		if err != nil {
+			return nil
+		}
+		idVal, ok := session.Values["user_id"]
+		if !ok {
+			return nil
+		}
+		userID, ok := idVal.(int64)
+		if !ok {
+			return nil
+		}
+		user, err := userRepo.FindByID(userID)
+		if err != nil {
+			return nil
+		}
+		return user
+	}
+
 	// --- Background jobs ---
 	scheduler := job.NewScheduler(db, rdb, radikoClient, hlsDownloader, storagePath)
 	go scheduler.Start(ctx)
@@ -111,6 +133,11 @@ func main() {
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.SecurityHeaders)
+
+	// 静的ファイル
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+	// Vite ビルド成果物のフォントパス互換 (CSSが /build/assets/ を参照)
+	r.Handle("/build/assets/*", http.StripPrefix("/build/assets/", http.FileServer(http.Dir("web/static"))))
 
 	// 認証
 	r.Get("/login", authHandler.ShowLogin)

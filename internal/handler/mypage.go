@@ -45,11 +45,11 @@ func (h *MypageHandler) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderOrJSON(w, "web/templates/mypage/index.html", map[string]interface{}{
-		"posts":   posts,
-		"total":   total,
-		"page":    page,
-		"perPage": perPage,
+	renderOrJSON(w, r, "web/templates/mypage/index.html", map[string]interface{}{
+		"Posts":   posts,
+		"Total":   total,
+		"Page":    page,
+		"PerPage": perPage,
 	})
 }
 
@@ -82,9 +82,9 @@ func (h *MypageHandler) Edit(w http.ResponseWriter, r *http.Request) {
 
 	tags, _ := h.postService.GetAllTags()
 
-	renderOrJSON(w, "web/templates/mypage/edit.html", map[string]interface{}{
-		"post": post,
-		"tags": tags,
+	renderOrJSON(w, r, "web/templates/mypage/edit.html", map[string]interface{}{
+		"Post": post,
+		"Tags": tags,
 	})
 }
 

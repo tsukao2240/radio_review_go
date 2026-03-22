@@ -361,7 +361,7 @@ func (h *RecordingHandler) ShowHistory(store sessions.Store) http.HandlerFunc {
 			recordings = []model.RecordingInfo{}
 		}
 
-		RenderWithBase(w, "web/templates/recording/history.html", map[string]interface{}{
+		RenderWithBase(w, r, "web/templates/recording/history.html", map[string]interface{}{
 			"recordings": recordings,
 		})
 	}

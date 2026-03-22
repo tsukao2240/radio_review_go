@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"html/template"
 	"net/http"
 
 	"github.com/gorilla/sessions"
@@ -40,25 +39,9 @@ func (h *NotificationHandler) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpl, tmplErr := template.ParseFiles(
-		"web/templates/layouts/base.html",
-		"web/templates/notifications/index.html",
-	)
-	if tmplErr != nil {
-		writeError(w, http.StatusInternalServerError, "テンプレートのパースに失敗しました: "+tmplErr.Error())
-		return
-	}
-
-	data := TemplateData{
-		Data: map[string]interface{}{
-			"Notifications": notifications,
-		},
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "base", data); err != nil {
-		writeError(w, http.StatusInternalServerError, "テンプレートのレンダリングに失敗しました: "+err.Error())
-	}
+	RenderWithBase(w, r, "web/templates/notifications/index.html", map[string]interface{}{
+		"Notifications": notifications,
+	})
 }
 
 // GetUnread は GET /api/notifications/unread を処理する。

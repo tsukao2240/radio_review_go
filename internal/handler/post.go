@@ -32,8 +32,8 @@ func NewPostHandler(
 }
 
 // renderOrJSON はテンプレートをレンダリングし、存在しない場合は JSON で代替する。
-func renderOrJSON(w http.ResponseWriter, tmplPath string, data interface{}) {
-	RenderWithBase(w, tmplPath, data)
+func renderOrJSON(w http.ResponseWriter, r *http.Request, tmplPath string, data interface{}) {
+	RenderWithBase(w, r, tmplPath, data)
 }
 
 // IndexPrograms は GET /program を処理する。番組一覧（検索付き）。
@@ -60,13 +60,13 @@ func (h *PostHandler) IndexPrograms(w http.ResponseWriter, r *http.Request) {
 
 	tags, _ := h.postService.GetAllTags()
 
-	renderOrJSON(w, "web/templates/post/index.html", map[string]interface{}{
-		"posts":   posts,
-		"total":   total,
-		"page":    page,
-		"perPage": perPage,
-		"keyword": keyword,
-		"tags":    tags,
+	renderOrJSON(w, r, "web/templates/post/index.html", map[string]interface{}{
+		"Results": posts,
+		"Total":   total,
+		"Page":    page,
+		"PerPage": perPage,
+		"Keyword": keyword,
+		"Tags":    tags,
 	})
 }
 
@@ -87,9 +87,9 @@ func (h *PostHandler) ShowReviewForm(w http.ResponseWriter, r *http.Request) {
 
 	tags, _ := h.postService.GetAllTags()
 
-	renderOrJSON(w, "web/templates/post/create.html", map[string]interface{}{
-		"programID": programID,
-		"tags":      tags,
+	renderOrJSON(w, r, "web/templates/post/create.html", map[string]interface{}{
+		"ProgramID": programID,
+		"Tags":      tags,
 	})
 }
 
@@ -163,11 +163,13 @@ func (h *PostHandler) ListAllReviews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderOrJSON(w, "web/templates/post/list_all.html", map[string]interface{}{
-		"posts":   posts,
-		"total":   total,
-		"page":    page,
-		"perPage": perPage,
+	tags, _ := h.postService.GetAllTags()
+	renderOrJSON(w, r, "web/templates/post/list_all.html", map[string]interface{}{
+		"Posts":   posts,
+		"Tags":    tags,
+		"Total":   total,
+		"Page":    page,
+		"PerPage": perPage,
 	})
 }
 
@@ -189,13 +191,13 @@ func (h *PostHandler) ListReviewsByProgram(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	renderOrJSON(w, "web/templates/post/list_each.html", map[string]interface{}{
-		"posts":     posts,
-		"total":     total,
-		"page":      page,
-		"perPage":   perPage,
-		"stationID": stationID,
-		"title":     title,
+	renderOrJSON(w, r, "web/templates/post/list_each.html", map[string]interface{}{
+		"Posts":        posts,
+		"Total":        total,
+		"Page":         page,
+		"PerPage":      perPage,
+		"StationID":    stationID,
+		"ProgramTitle": title,
 	})
 }
 
