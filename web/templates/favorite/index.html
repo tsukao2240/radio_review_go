@@ -1,0 +1,104 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>お気に入り番組</title>
+
+<div class="container mt-4">
+    <div class="favorite-header">
+        <h3>お気に入り番組</h3>
+    </div>
+
+    {{ if .Flash }}
+        <div class="alert alert-success">{{ .Flash }}</div>
+    {{ end }}
+
+    {{ with .Data }}
+    {{ $favorites := index . "Favorites" }}
+    {{ if $favorites }}
+        <div class="favorite-list">
+            {{ range $favorites }}
+                <div class="favorite-card">
+                    <div class="favorite-card-header">
+                        <div>
+                            <a href="/programs/detail?station_id={{ .StationID }}&title={{ .ProgramTitle }}&from=favorites" style="text-decoration: none; color: inherit;">
+                                <div class="favorite-title" style="cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#007bff'" onmouseout="this.style.color='inherit'">{{ .ProgramTitle }}</div>
+                            </a>
+                            {{ if .BroadcastDay }}
+                                <span class="badge bg-secondary" data-broadcast-day="{{ .BroadcastDay }}"></span>
+                            {{ end }}
+                            <span class="favorite-station">{{ .StationID }}</span>
+                        </div>
+                    </div>
+                    <div class="favorite-date">
+                        <i class="far fa-clock"></i> 登録日時: {{ .CreatedAt.Format "2006年01月02日 15:04" }}
+                    </div>
+
+                    <div class="favorite-actions" style="margin-top: 10px;">
+                        <button class="btn-delete delete-favorite-btn"
+                                data-favorite-id="{{ .ID }}"
+                                data-program-title="{{ .ProgramTitle }}">
+                            <i class="fas fa-trash"></i> 削除
+                        </button>
+                    </div>
+                </div>
+            {{ end }}
+        </div>
+    {{ else }}
+        <div class="empty-state">
+            <i class="far fa-heart"></i>
+            <p>お気に入り番組がありません</p>
+        </div>
+    {{ end }}
+    {{ end }}
+
+    <div class="back-button">
+        <a href="/programs/schedule" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 放送中の番組に戻る
+        </a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 曜日バッジの表示
+    var days = ['月', '火', '水', '木', '金', '土', '日'];
+    document.querySelectorAll('[data-broadcast-day]').forEach(function(el) {
+        var day = parseInt(el.dataset.broadcastDay);
+        if (!isNaN(day) && day >= 0 && day < 7) {
+            el.textContent = days[day] + '曜日';
+        }
+    });
+
+    document.querySelectorAll('.delete-favorite-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const favoriteId = this.dataset.favoriteId;
+            const programTitle = this.dataset.programTitle;
+
+            if (!confirm(programTitle + ' をお気に入りから削除しますか？')) {
+                return;
+            }
+
+            fetch('/favorites/destroy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ id: parseInt(favoriteId) })
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (!data.error) {
+                    location.reload();
+                } else {
+                    alert('削除に失敗しました: ' + data.error);
+                }
+            })
+            .catch(function(error) {
+                alert('エラーが発生しました: ' + error);
+            });
+        });
+    });
+});
+</script>
+{{ end }}

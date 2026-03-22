@@ -1,0 +1,266 @@
+{{ define "base" }}<!doctype html>
+<html lang="ja" data-bs-theme="auto">
+<script nonce="{{ .Nonce }}">
+    (function() {
+        const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', theme);
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            document.documentElement.setAttribute('data-bs-theme', e.matches ? 'dark' : 'light');
+        });
+    })();
+</script>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSRF Token -->
+    <meta name="csrf-token" content="{{ .CSRFToken }}">
+
+    <title>RadioProgram Review</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#667eea">
+    <meta name="color-scheme" content="light dark">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Radio Review">
+    <meta name="description" content="ラジオ番組のレビューと録音管理アプリケーション">
+
+    <!-- PWA Icons -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="192x192" href="/images/icons/icon-192x192.png">
+
+    <!-- Fonts -->
+    <link rel="dns-prefetch" href="//fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- App CSS (Viteビルド成果物) -->
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- ヘッダーナビゲーション -->
+        <nav class="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-primary-500 to-primary-900 shadow-lg" role="navigation">
+            <div class="container mx-auto px-4">
+                <div class="flex items-center justify-between h-16 md:h-20">
+                    <!-- ロゴ -->
+                    <a href="/" class="text-white font-bold text-xl md:text-2xl flex-shrink-0">
+                        RadioProgram Review
+                    </a>
+
+                    <!-- ハンバーガーメニューボタン（モバイルのみ） -->
+                    <button
+                        id="mobile-menu-toggle"
+                        class="md:hidden touch-target text-white focus:outline-none focus:ring-2 focus:ring-white/50 rounded-lg p-2"
+                        aria-label="メニューを開く"
+                        aria-expanded="false"
+                        aria-controls="mobile-menu"
+                    >
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+
+                    <!-- デスクトップメニュー -->
+                    <div class="hidden md:flex md:items-center md:space-x-2">
+                        <a href="/search" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-search mr-2"></i>番組検索
+                        </a>
+                        <a href="/programs/schedule" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-broadcast-tower mr-2"></i>放送中
+                        </a>
+                        <a href="/recording/twoweek" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-podcast mr-2"></i>録音
+                        </a>
+                        <a href="/recording/history" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-microphone mr-2"></i>履歴
+                        </a>
+
+                        {{ if .User }}
+                        <a href="/favorites" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-heart mr-2"></i>お気に入り
+                        </a>
+                        <a href="/posts" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-book-open mr-2"></i>レビュー
+                        </a>
+
+                        <!-- 通知 -->
+                        <a href="/notifications" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-bell mr-2"></i>通知
+                        </a>
+
+                        <!-- ユーザーメニュー（ドロップダウン） -->
+                        <div class="relative ml-2 group">
+                            <button class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                                <i class="fas fa-user-circle mr-2"></i>
+                                {{ .User.Name }}
+                                <i class="fas fa-chevron-down ml-2"></i>
+                            </button>
+                            <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-2 invisible group-hover:visible transition-all">
+                                <a href="/mypage" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                    <i class="fas fa-user mr-2"></i>マイページ
+                                </a>
+                                <a href="/recording/schedules" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                    <i class="fas fa-calendar-check mr-2"></i>録音予約
+                                </a>
+                                <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
+                                <form method="POST" action="/logout">
+                                    <input type="hidden" name="_csrf" value="{{ .CSRFToken }}">
+                                    <button type="submit" class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                        <i class="fas fa-sign-out-alt mr-2"></i>ログアウト
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {{ else }}
+                        <a href="/posts" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-book-open mr-2"></i>レビュー
+                        </a>
+                        <a href="/login" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                            <i class="fas fa-sign-in-alt mr-2"></i>ログイン
+                        </a>
+                        <a href="/register" class="touch-target bg-white/20 text-white hover:bg-white/30 rounded-lg px-4 py-2 transition flex items-center text-sm font-semibold">
+                            <i class="fas fa-user-plus mr-2"></i>会員登録
+                        </a>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- モバイルメニュー（スライドイン） -->
+        <div
+            id="mobile-menu"
+            class="fixed inset-y-0 left-0 w-72 bg-gradient-to-b from-primary-600 to-primary-900 transform -translate-x-full transition-transform duration-300 ease-in-out md:hidden z-50 overflow-y-auto"
+            aria-hidden="true"
+        >
+            <div class="p-6 space-y-4">
+                <button
+                    id="mobile-menu-close"
+                    class="touch-target text-white mb-4"
+                    aria-label="メニューを閉じる"
+                >
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+
+                <nav class="space-y-2">
+                    <a href="/search" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <i class="fas fa-search mr-3"></i>番組検索
+                    </a>
+                    <a href="/programs/schedule" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <i class="fas fa-broadcast-tower mr-3"></i>放送中の番組
+                    </a>
+                    <a href="/recording/twoweek" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <i class="fas fa-podcast mr-3"></i>タイムフリー録音
+                    </a>
+                    <a href="/recording/history" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <i class="fas fa-microphone mr-3"></i>録音履歴
+                    </a>
+                    <a href="/posts" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <i class="fas fa-book-open mr-3"></i>レビューを見る
+                    </a>
+
+                    {{ if .User }}
+                    <div class="border-t border-white/20 pt-4 mt-4">
+                        <p class="text-white/70 text-sm px-4 mb-2">{{ .User.Name }}</p>
+                        <a href="/mypage" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                            <i class="fas fa-user mr-3"></i>マイページ
+                        </a>
+                        <a href="/recording/schedules" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                            <i class="fas fa-calendar-check mr-3"></i>録音予約
+                        </a>
+                        <a href="/favorites" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                            <i class="fas fa-heart mr-3"></i>お気に入り番組
+                        </a>
+                        <a href="/notifications" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                            <i class="fas fa-bell mr-3"></i>通知
+                        </a>
+                        <a href="/posts/create" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                            <i class="fas fa-pen-square mr-3"></i>レビューを投稿
+                        </a>
+                        <form method="POST" action="/logout">
+                            <input type="hidden" name="_csrf" value="{{ .CSRFToken }}">
+                            <button type="submit" class="w-full text-left touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                                <i class="fas fa-sign-out-alt mr-3"></i>ログアウト
+                            </button>
+                        </form>
+                    </div>
+                    {{ else }}
+                    <div class="border-t border-white/20 pt-4 mt-4">
+                        <a href="/login" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                            <i class="fas fa-sign-in-alt mr-3"></i>ログイン
+                        </a>
+                        <a href="/register" class="block touch-target bg-white/20 text-white hover:bg-white/30 rounded-lg px-4 py-3 transition font-semibold">
+                            <i class="fas fa-user-plus mr-3"></i>会員登録
+                        </a>
+                    </div>
+                    {{ end }}
+                </nav>
+            </div>
+        </div>
+
+        <!-- オーバーレイ（メニュー表示時に背景を暗くする） -->
+        <div
+            id="mobile-menu-overlay"
+            class="fixed inset-0 bg-black/50 hidden md:hidden z-40"
+            aria-hidden="true"
+        ></div>
+
+        <!-- フラッシュメッセージ -->
+        {{ if .Flash }}
+        <div class="container mx-auto px-4 pt-20">
+            <div class="alert alert-success">{{ .Flash }}</div>
+        </div>
+        {{ end }}
+
+        <!-- メインコンテンツ -->
+        <main class="main-content container mx-auto px-4 md:px-6 pt-20">
+            {{ block "content" . }}{{ end }}
+        </main>
+
+        <!-- フッター -->
+        <footer class="footer bg-body-tertiary mt-8">
+            <div class="container mx-auto px-4 py-4 text-right">
+                <small>&copy; 2024 RadioProgram Review</small>
+            </div>
+        </footer>
+    </div>
+
+    <!-- App JS (Viteビルド成果物) -->
+    <script nonce="{{ .Nonce }}" src="/static/app.js"></script>
+
+    <!-- モバイルメニュー制御 -->
+    <script nonce="{{ .Nonce }}">
+    (function() {
+        const toggle = document.getElementById('mobile-menu-toggle');
+        const menu = document.getElementById('mobile-menu');
+        const overlay = document.getElementById('mobile-menu-overlay');
+        const close = document.getElementById('mobile-menu-close');
+
+        function openMenu() {
+            menu.classList.remove('-translate-x-full');
+            menu.setAttribute('aria-hidden', 'false');
+            overlay.classList.remove('hidden');
+            toggle.setAttribute('aria-expanded', 'true');
+        }
+        function closeMenu() {
+            menu.classList.add('-translate-x-full');
+            menu.setAttribute('aria-hidden', 'true');
+            overlay.classList.add('hidden');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+        if (toggle) toggle.addEventListener('click', openMenu);
+        if (close) close.addEventListener('click', closeMenu);
+        if (overlay) overlay.addEventListener('click', closeMenu);
+    })();
+    </script>
+</body>
+</html>
+{{ end }}

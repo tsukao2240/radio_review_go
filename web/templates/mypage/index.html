@@ -1,0 +1,58 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>{{ if .User }}{{ .User.Name }}さんのマイページ{{ else }}マイページ{{ end }}</title>
+
+{{ with .Data }}
+{{ $posts := index . "Posts" }}
+
+{{ if $posts }}
+<div class="mypage-header">
+    <h3>{{ if $.User }}{{ $.User.Name }}さん{{ end }}が投稿したレビュー</h3>
+</div>
+
+<div id="reviews">
+    {{ range $posts }}
+    <div class="review-card">
+        <div class="review-card-header">
+            <a href="/programs/detail?station_id={{ .StationID }}&title={{ .ProgramTitle }}&from=mypage">
+                {{ .ProgramTitle }}
+            </a>
+            <div class="review-actions">
+                <a href="/mypage/reviews/edit/{{ .ID }}" class="btn-edit">
+                    <i class="fas fa-edit"></i> 編集
+                </a>
+                <form method="POST" action="/mypage/reviews/delete" style="display: inline;">
+                    <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
+                    <input type="hidden" name="id" value="{{ .ID }}">
+                    <button type="submit" class="btn-delete-review" onclick="return confirm('このレビューを削除しますか？')">
+                        <i class="fas fa-trash"></i> 削除
+                    </button>
+                </form>
+            </div>
+        </div>
+        <div class="review-card-body">
+            <div class="review-title">{{ .Title }}</div>
+            <div class="review-content">{{ .Body }}</div>
+        </div>
+        <div class="review-card-footer">
+            <span class="review-meta">
+                <i class="far fa-clock"></i>
+                投稿日: {{ .CreatedAt.Format "2006年01月02日" }}
+            </span>
+        </div>
+    </div>
+    {{ end }}
+</div>
+
+{{ else }}
+<div class="empty-state">
+    <i class="far fa-edit"></i>
+    <p>まだ投稿がありません</p>
+    <a href="/programs/schedule" class="btn btn-primary">
+        <i class="fas fa-plus"></i> レビューを投稿する
+    </a>
+</div>
+{{ end }}
+{{ end }}
+{{ end }}

@@ -1,0 +1,121 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>録音予約</title>
+
+<div class="container mt-4">
+    <h3 class="text-center mb-4">録音予約</h3>
+
+    {{ if .Flash }}
+        <div class="alert alert-success">{{ .Flash }}</div>
+    {{ end }}
+
+    {{ with .Data }}
+    {{ $schedules := index . "Schedules" }}
+    {{ if $schedules }}
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead class="thead-light">
+                    <tr>
+                        <th>放送局</th>
+                        <th>番組名</th>
+                        <th>予約日時</th>
+                        <th>状態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range $schedules }}
+                        <tr>
+                            <td>{{ .StationID }}</td>
+                            <td>{{ .ProgramTitle }}</td>
+                            <td>
+                                {{ .ScheduledStartTime.Format "2006/01/02 15:04" }}
+                                〜
+                                {{ .ScheduledEndTime.Format "15:04" }}
+                            </td>
+                            <td>
+                                {{ if eq .Status "pending" }}
+                                    <span class="badge badge-warning">予約中</span>
+                                {{ else if eq .Status "recording" }}
+                                    <span class="badge badge-primary">録音中</span>
+                                {{ else if eq .Status "completed" }}
+                                    <span class="badge badge-success">完了</span>
+                                {{ else if eq .Status "failed" }}
+                                    <span class="badge badge-danger">失敗</span>
+                                {{ else if eq .Status "cancelled" }}
+                                    <span class="badge badge-secondary">キャンセル</span>
+                                {{ else }}
+                                    <span class="badge badge-secondary">{{ .Status }}</span>
+                                {{ end }}
+                            </td>
+                            <td>
+                                {{ if eq .Status "pending" }}
+                                    <button class="btn btn-sm btn-danger cancel-schedule-btn"
+                                            data-schedule-id="{{ .ID }}"
+                                            data-program-title="{{ .ProgramTitle }}">
+                                        <i class="fas fa-times"></i> キャンセル
+                                    </button>
+                                {{ else if and (eq .Status "completed") .RecordingID }}
+                                    <a href="/recording/history" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-history"></i> 録音履歴で確認
+                                    </a>
+                                {{ else }}
+                                    <span class="text-muted">--</span>
+                                {{ end }}
+                            </td>
+                        </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    {{ else }}
+        <div class="alert alert-warning text-center">
+            録音予約がありません
+        </div>
+    {{ end }}
+    {{ end }}
+
+    <div class="text-center mt-4">
+        <a href="/programs/schedule" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 放送中の番組に戻る
+        </a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.cancel-schedule-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const scheduleId = this.dataset.scheduleId;
+            const programTitle = this.dataset.programTitle;
+
+            if (!confirm('「' + programTitle + '」の録音予約をキャンセルしますか?')) {
+                return;
+            }
+
+            fetch('/recording/schedule/cancel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ schedule_id: parseInt(scheduleId) })
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (!data.error) {
+                    alert('録音予約をキャンセルしました');
+                    location.reload();
+                } else {
+                    alert('キャンセルに失敗しました: ' + data.error);
+                }
+            })
+            .catch(function(error) {
+                alert('エラーが発生しました: ' + error);
+            });
+        });
+    });
+});
+</script>
+{{ end }}

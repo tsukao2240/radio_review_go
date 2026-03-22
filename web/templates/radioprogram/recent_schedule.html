@@ -1,0 +1,75 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>放送中の番組</title>
+
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-6 text-center">
+        <i class="fas fa-broadcast-tower mr-2"></i>放送中の番組
+    </h1>
+
+    {{ with .Data }}
+    {{ $results := index . "Results" }}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{ range $results }}
+        <div class="card-base group hover:scale-105 transition-transform duration-200">
+            <div class="flex items-center justify-between mb-3">
+                <a href="/programs/schedule/{{ index . "station_id" }}"
+                   class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition">
+                    <i class="fas fa-radio mr-1"></i>{{ index . "station" }}
+                </a>
+                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
+                    <span class="relative flex h-2 w-2 mr-1">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                    放送中
+                </span>
+            </div>
+
+            <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2 group-hover:text-primary-600 transition">
+                <a href="/posts/each/{{ index . "station_id" }}/{{ index . "title" }}?from=schedule"
+                   class="hover:underline">
+                    {{ index . "title" }}
+                </a>
+            </h3>
+
+            {{ if index . "cast" }}
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                <i class="fas fa-microphone mr-1"></i>{{ index . "cast" }}
+            </p>
+            {{ end }}
+
+            <div class="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-4">
+                <i class="fas fa-clock mr-2"></i>
+                <span>{{ index . "start" }} - {{ index . "end" }}</span>
+            </div>
+
+            <div class="flex space-x-2 mt-auto">
+                <a href="/programs/schedule/{{ index . "station_id" }}"
+                   class="flex-1 touch-target text-center bg-primary-500 text-white font-semibold py-2 rounded-lg hover:bg-primary-600 transition text-sm">
+                    <i class="fas fa-calendar mr-1"></i>番組表
+                </a>
+                {{ if index . "url" }}
+                <a href="{{ index . "url" }}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="flex-1 touch-target text-center border-2 border-primary-500 text-primary-600 dark:text-primary-400 font-semibold py-2 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-sm">
+                    <i class="fas fa-external-link-alt mr-1"></i>公式HP
+                </a>
+                {{ end }}
+            </div>
+        </div>
+        {{ end }}
+    </div>
+
+    {{ if not $results }}
+    <div class="card-base text-center py-12">
+        <i class="fas fa-info-circle text-4xl text-gray-400 mb-4"></i>
+        <p class="text-gray-600 dark:text-gray-400">現在放送中の番組がありません。</p>
+    </div>
+    {{ end }}
+    {{ end }}
+</div>
+{{ end }}

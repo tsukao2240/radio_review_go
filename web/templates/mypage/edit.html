@@ -1,0 +1,50 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>レビューの編集</title>
+
+{{ with .Data }}
+{{ $post := index . "Post" }}
+{{ $tags := index . "Tags" }}
+
+<div class="d-flex flex-column align-items-center">
+    <br>
+    <h3 class="caption">レビューの編集</h3>
+    <div>
+        <form method="POST" action="/mypage/reviews/update/{{ $post.ID }}">
+            <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
+            <input type="hidden" name="id" value="{{ $post.ID }}">
+            <input type="hidden" name="user_id" value="{{ $post.UserID }}">
+            <input type="hidden" name="program_id" value="{{ $post.ProgramID }}">
+            <input type="hidden" name="program_title" value="{{ $post.ProgramTitle }}">
+
+            <div class="form-group">
+                <label for="title">タイトル</label>
+                <input type="text" name="title" id="title" class="form-control" value="{{ $post.Title }}">
+            </div>
+            <div class="form-group">
+                <label for="body">内容</label>
+                <textarea name="body" id="body" class="form-control" rows="10">{{ $post.Body }}</textarea>
+            </div>
+            <div class="form-group">
+                <label for="rating">評価</label>
+                <div id="rating-container"></div>
+                <input type="hidden" name="rating" id="rating" value="{{ $post.Rating }}">
+            </div>
+            <div class="form-group">
+                <label>タグ（複数選択可）</label>
+                {{ range $tags }}
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="tags[]" value="{{ .ID }}" id="tag-{{ .ID }}">
+                    <label class="form-check-label" for="tag-{{ .ID }}">{{ .Name }}</label>
+                </div>
+                {{ end }}
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">編集する</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{ end }}
+{{ end }}

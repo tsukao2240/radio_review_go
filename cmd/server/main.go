@@ -1,13 +1,25 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/gorilla/sessions"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/yourname/radio_review_go/internal/handler"
+	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
+	"github.com/yourname/radio_review_go/internal/repository"
+	"github.com/yourname/radio_review_go/internal/service"
+	"github.com/yourname/radio_review_go/pkg/radiko"
 )
 
 func main() {
@@ -15,19 +27,166 @@ func main() {
 		log.Println("no .env file found, using environment variables")
 	}
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	// --- DB ---
+	db := mustConnectDB()
 
+	// --- Redis ---
+	rdb := mustConnectRedis()
+
+	// --- Session store ---
+	appKey := os.Getenv("APP_KEY")
+	if appKey == "" {
+		appKey = "change-me-in-production-32bytes!!"
+	}
+	store := sessions.NewCookieStore([]byte(appKey))
+	store.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	// --- Repositories ---
+	userRepo := repository.NewUserRepository(db)
+	postRepo := repository.NewPostRepository(db)
+	programRepo := repository.NewRadioProgramRepository(db)
+	favRepo := repository.NewFavoriteProgramRepository(db)
+	scheduleRepo := repository.NewRecordingScheduleRepository(db)
+	tagRepo := repository.NewPostTagRepository(db)
+	likeRepo := repository.NewPostLikeRepository(db)
+	commentRepo := repository.NewPostCommentRepository(db)
+	notifRepo := repository.NewNotificationRepository(db)
+
+	// --- Services ---
+	radikoSvc := service.NewRadikoApiService(rdb, programRepo)
+	searchSvc := service.NewRadioProgramSearchService(programRepo, rdb)
+	postSvc := service.NewPostService(postRepo, programRepo, tagRepo)
+	interactionSvc := service.NewPostInteractionService(likeRepo, commentRepo)
+	favSvc := service.NewFavoriteService(favRepo)
+	notifSvc := service.NewNotificationService(notifRepo)
+	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
+
+	// --- Radiko client ---
+	keyPath := "storage/keys/radiko_auth_key.txt"
+	radikoClient := radiko.NewClient(rdb, keyPath)
+
+	maxParallel := int64(10)
+	if v := os.Getenv("RECORDING_MAX_PARALLEL"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			maxParallel = n
+		}
+	}
+	hlsDownloader := radiko.NewHLSDownloader(radikoClient, maxParallel)
+
+	storagePath := os.Getenv("RECORDING_STORAGE_PATH")
+	if storagePath == "" {
+		storagePath = "storage/recordings"
+	}
+
+	// --- Handlers ---
+	authHandler := handler.NewAuthHandler(userRepo, store)
+	broadcastHandler := handler.NewBroadcastHandler(radikoSvc, searchSvc)
+	postHandler := handler.NewPostHandler(postSvc, interactionSvc, store)
+	mypageHandler := handler.NewMypageHandler(postSvc, store)
+	favHandler := handler.NewFavoriteHandler(favSvc, store)
+	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
+	notifHandler := handler.NewNotificationHandler(notifSvc, store)
+	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
+
+	// --- Router ---
+	r := chi.NewRouter()
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(appmiddleware.SecurityHeaders)
+
+	// 認証
+	r.Get("/login", authHandler.ShowLogin)
+	r.Post("/login", authHandler.Login)
+	r.Post("/logout", authHandler.Logout)
+	r.Get("/register", authHandler.ShowRegister)
+	r.Post("/register", authHandler.Register)
+
+	// トップ
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("radio_review_go: ok"))
+		http.Redirect(w, r, "/schedule", http.StatusFound)
 	})
 
-	// TODO: フェーズ3でハンドラーを登録する
-	// r.Mount("/", handler.NewBroadcastRouter(broadcastHandler))
-	// r.Mount("/recording", handler.NewRecordingRouter(recordingHandler))
-	// r.Mount("/review", handler.NewPostRouter(postHandler))
-	// r.Mount("/favorites", handler.NewFavoriteRouter(favoriteHandler))
+	// 番組表・検索
+	r.Get("/schedule", broadcastHandler.GetCurrentSchedule)
+	r.Get("/schedule/{station_id}", broadcastHandler.GetWeeklySchedule)
+	r.Get("/timefree", broadcastHandler.GetTwoWeekScheduleSelect)
+	r.Get("/timefree/{station_id}", broadcastHandler.GetTwoWeekScheduleByStation)
+	r.Get("/list/{station_id}/{title}", broadcastHandler.ShowProgramDetail)
+	r.Get("/search", broadcastHandler.Search)
+
+	// レビュー（公開）
+	r.Get("/program", postHandler.IndexPrograms)
+	r.Get("/review/list", postHandler.ListAllReviews)
+	r.Get("/list/{station_id}/{title}/review", postHandler.ListReviewsByProgram)
+	r.Get("/program/{program_id}/rating", postHandler.GetProgramRating)
+
+	// レビュー（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/review/{id}", postHandler.ShowReviewForm)
+		r.Post("/review/{id}", postHandler.CreateReview)
+	})
+
+	// マイページ（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/my", mypageHandler.Index)
+		r.Get("/my/edit/{program_id}", mypageHandler.Edit)
+		r.Post("/my/edit/{program_id}", mypageHandler.Update)
+		r.Post("/my", mypageHandler.Destroy)
+	})
+
+	// お気に入り（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/favorites", favHandler.Index)
+		r.Post("/favorites", favHandler.Store)
+		r.Post("/favorites/delete", favHandler.Destroy)
+		r.Get("/favorites/check", favHandler.Check)
+	})
+
+	// 録音（認証不要）
+	r.Post("/recording/timefree/start", recordingHandler.StartTimefreeRecording(store))
+	r.Post("/recording/stop", recordingHandler.StopRecording(store))
+	r.Get("/recording/status", recordingHandler.GetRecordingStatus(store))
+	r.Get("/recording/download", recordingHandler.DownloadRecording(store))
+	r.Get("/recording/list", recordingHandler.ListRecordings(store))
+	r.Get("/recording/history", recordingHandler.ShowHistory(store))
+	r.Post("/recording/delete", recordingHandler.DeleteRecording(store))
+
+	// 録音予約（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/recording/schedules", scheduleHandler.Index)
+		r.Post("/recording/schedule", scheduleHandler.Store)
+		r.Post("/recording/schedule/cancel", scheduleHandler.Cancel)
+	})
+
+	// 通知（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/notifications", notifHandler.Index)
+		r.Get("/api/notifications/unread", notifHandler.GetUnread)
+		r.Get("/api/notifications/all", notifHandler.GetAll)
+		r.Post("/api/notifications/mark-read", notifHandler.MarkAsRead)
+		r.Post("/api/notifications/mark-all-read", notifHandler.MarkAllAsRead)
+	})
+
+	// 投稿インタラクション API（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Post("/api/posts/like", postHandler.LikePost)
+		r.Post("/api/posts/unlike", postHandler.UnlikePost)
+		r.Post("/api/posts/comment", postHandler.AddComment)
+		r.Post("/api/posts/comment/delete", postHandler.DeleteComment)
+		r.Get("/api/posts/comments", postHandler.GetComments)
+		r.Get("/api/posts/check-like", postHandler.CheckLike)
+	})
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {
@@ -38,4 +197,36 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func mustConnectDB() *sqlx.DB {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
+		os.Getenv("DB_USERNAME"),
+		os.Getenv("DB_PASSWORD"),
+		getEnvOrDefault("DB_HOST", "127.0.0.1"),
+		getEnvOrDefault("DB_PORT", "3306"),
+		getEnvOrDefault("DB_DATABASE", "radio_review"),
+	)
+	db, err := sqlx.Open("mysql", dsn)
+	if err != nil {
+		log.Fatalf("failed to open DB: %v", err)
+	}
+	return db
+}
+
+func mustConnectRedis() *redis.Client {
+	rdb := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%s",
+			getEnvOrDefault("REDIS_HOST", "127.0.0.1"),
+			getEnvOrDefault("REDIS_PORT", "6379"),
+		),
+	})
+	return rdb
+}
+
+func getEnvOrDefault(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }

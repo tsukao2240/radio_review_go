@@ -1,0 +1,69 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>レビュー一覧</title>
+
+{{ with .Data }}
+{{ $posts := index . "Posts" }}
+{{ $tags := index . "Tags" }}
+
+<!-- フィルターコントロール -->
+<div class="filter-controls">
+    <form method="GET" action="/posts/all" class="row g-3">
+        <div class="col-md-3">
+            <label for="min_rating" class="form-label">最低評価</label>
+            <select name="min_rating" id="min_rating" class="form-select">
+                <option value="">すべて</option>
+                <option value="4">4つ星以上</option>
+                <option value="3">3つ星以上</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="tag_id" class="form-label">タグ</label>
+            <select name="tag_id" id="tag_id" class="form-select">
+                <option value="">すべて</option>
+                {{ range $tags }}
+                    <option value="{{ .ID }}">{{ .Name }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="sort_by" class="form-label">並び順</label>
+            <select name="sort_by" id="sort_by" class="form-select">
+                <option value="created_at">投稿日順</option>
+                <option value="likes_count">いいね順</option>
+                <option value="rating">評価順</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">絞り込み</button>
+        </div>
+    </form>
+</div>
+
+{{ if $posts }}
+<h3 class="caption">レビュー一覧</h3>
+<br>
+<div id="reviews">
+    <div class="card">
+        {{ range $posts }}
+        <div class="card-header">
+            <a href="/programs/detail?station_id={{ .StationID }}&title={{ .ProgramTitle }}&from=review">{{ .ProgramTitle }}</a>
+        </div>
+        <div class="card-body card_review_body">
+            <dt>{{ .Title }}</dt>
+            <dd>{{ .Body }}</dd>
+        </div>
+        <div class="card-footer card_review_footer">
+            <span class="review_meta">
+                投稿日: {{ .CreatedAt.Format "2006年01月02日" }}
+            </span>
+        </div>
+        {{ end }}
+    </div>
+</div>
+{{ else }}
+<h3 class="caption">レビューがまだありません</h3>
+{{ end }}
+{{ end }}
+{{ end }}

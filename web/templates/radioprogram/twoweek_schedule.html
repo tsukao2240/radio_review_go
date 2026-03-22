@@ -1,0 +1,84 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+{{ with .Data }}
+{{ $broadcastName := index . "BroadcastName" }}
+{{ $entries := index . "Entries" }}
+{{ $dates := index . "Dates" }}
+{{ $selectedArea := index . "SelectedArea" }}
+
+<title>{{ $broadcastName }} - 2週間番組表</title>
+
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 space-y-4 md:space-y-0">
+        <a href="/recording/twoweek?area={{ $selectedArea }}"
+           class="touch-target inline-flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition w-fit">
+            <i class="fas fa-arrow-left mr-2"></i>放送局選択に戻る
+        </a>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">
+            <i class="fas fa-calendar-alt mr-2"></i>{{ $broadcastName }} - 2週間番組表
+        </h1>
+        <div class="md:w-32"></div>
+    </div>
+
+    <!-- 日付ナビゲーション -->
+    <div class="mb-8">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-3">
+            <i class="fas fa-calendar mr-2"></i>日付を選択
+        </h2>
+        <div class="relative">
+            <div id="date-scroll-container"
+                 class="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide space-x-2">
+                {{ range $dates }}
+                <a href="#date-{{ . }}"
+                   class="snap-center flex-shrink-0 touch-target min-w-[100px] px-4 py-3 rounded-lg text-center font-medium transition bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-primary-100 dark:hover:bg-primary-900">
+                    {{ . }}
+                </a>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+
+    <!-- 番組一覧 -->
+    {{ range $dates }}
+    {{ $date := . }}
+    <div id="date-{{ $date }}" class="mb-12">
+        <h2 class="text-xl md:text-2xl font-bold text-gray-800 dark:text-white mb-4 sticky top-20 bg-white dark:bg-gray-900 py-2 z-10">
+            {{ $date }}
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {{ range $entries }}
+            {{ if eq (index . "date") $date }}
+            <div class="card-base">
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
+                    <a href="/programs/detail?station_id={{ index . "station_id" }}&title={{ index . "title" }}&from=timefree"
+                       class="hover:underline hover:text-primary-600 transition">
+                        {{ index . "title" }}
+                    </a>
+                </h3>
+                {{ if index . "cast" }}
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <i class="fas fa-microphone mr-1"></i>{{ index . "cast" }}
+                </p>
+                {{ end }}
+                <div class="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-3">
+                    <i class="fas fa-clock mr-1"></i>{{ index . "start" }} - {{ index . "end" }}
+                </div>
+                <button class="btn btn-sm btn-success recording-btn w-100"
+                        data-station-id="{{ index . "station_id" }}"
+                        data-title="{{ index . "title" }}"
+                        data-date="{{ index . "date" }}"
+                        data-start="{{ index . "start" }}"
+                        data-end="{{ index . "end" }}">
+                    <i class="fas fa-microphone"></i> タイムフリー録音
+                </button>
+            </div>
+            {{ end }}
+            {{ end }}
+        </div>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
+{{ end }}

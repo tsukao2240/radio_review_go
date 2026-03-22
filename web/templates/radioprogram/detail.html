@@ -1,0 +1,58 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+{{ with .Data }}
+{{ $entries := index . "Entries" }}
+{{ $latestBroadcast := index . "LatestBroadcast" }}
+
+{{ if $entries }}
+{{ range $entries }}
+<title>{{ index . "title" }}</title>
+{{ end }}
+<div class="d-flex justify-content-sm-around">
+    <div class="col-lg-4">
+        {{ range $entries }}
+        <section>
+            <h3>{{ index . "title" }}</h3>
+            <h5>{{ index . "cast" }}</h5>
+            {{ if index . "image" }}
+            <div>
+                <img src="{{ index . "image" }}" loading="lazy" alt="{{ index . "title" }}">
+            </div>
+            {{ end }}
+            {{ if index . "info" }}
+            <br>
+            <div>{{ index . "info" }}</div>
+            {{ end }}
+            <br>
+            <!-- お気に入りボタン -->
+            <button id="favorite-btn" class="btn btn-outline-danger mb-3" style="width: 100%;">
+                <i class="fas fa-heart"></i> お気に入りに追加
+            </button>
+            <!-- タイムフリー録音 -->
+            {{ if $latestBroadcast }}
+            <div class="timefree-recording-section mb-3">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 直近の放送：{{ index $latestBroadcast "date" }} {{ index $latestBroadcast "start" }}〜{{ index $latestBroadcast "end" }}
+                </div>
+                <button class="btn btn-success recording-btn"
+                        data-station-id="{{ index . "id" }}"
+                        data-title="{{ index . "title" }}"
+                        data-date="{{ index $latestBroadcast "date" }}"
+                        data-start="{{ index $latestBroadcast "start" }}"
+                        data-end="{{ index $latestBroadcast "end" }}">
+                    <i class="fas fa-microphone"></i> この放送を録音する
+                </button>
+            </div>
+            {{ else }}
+            <div class="alert alert-secondary mb-3">
+                <i class="fas fa-exclamation-circle"></i> タイムフリー期間内の放送がありません
+            </div>
+            {{ end }}
+        </section>
+        {{ end }}
+    </div>
+</div>
+{{ end }}
+{{ end }}
+{{ end }}

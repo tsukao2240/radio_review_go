@@ -1,0 +1,110 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0"><i class="fas fa-bell me-2"></i>通知一覧</h4>
+                    {{ with .Data }}
+                    {{ $notifications := index . "Notifications" }}
+                    {{ if $notifications }}
+                        <form action="/api/notifications/mark-all-read" method="POST" class="d-inline">
+                            <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
+                            <button type="submit" class="btn btn-sm btn-light">
+                                <i class="fas fa-check-double me-1"></i>全て既読にする
+                            </button>
+                        </form>
+                    {{ end }}
+                    {{ end }}
+                </div>
+
+                <div class="card-body p-0">
+                    {{ with .Data }}
+                    {{ $notifications := index . "Notifications" }}
+                    {{ if not $notifications }}
+                        <div class="text-center py-5">
+                            <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                            <h5 class="text-muted">通知はありません</h5>
+                        </div>
+                    {{ else }}
+                        <div class="list-group list-group-flush">
+                            {{ range $notifications }}
+                                <div class="list-group-item {{ if .IsRead }}bg-light{{ else }}bg-white{{ end }} border-start border-4
+                                    {{ if eq .Type "recording_complete" }}border-success
+                                    {{ else if eq .Type "recording_start" }}border-info
+                                    {{ else if eq .Type "recording_failed" }}border-danger
+                                    {{ else if eq .Type "favorite_broadcast" }}border-warning
+                                    {{ else }}border-secondary{{ end }}">
+
+                                    <div class="d-flex w-100 justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex align-items-center mb-2">
+                                                <span class="me-2" style="font-size: 1.5em;">
+                                                    {{ if eq .Type "recording_start" }}🔴
+                                                    {{ else if eq .Type "recording_complete" }}✅
+                                                    {{ else if eq .Type "recording_failed" }}❌
+                                                    {{ else if eq .Type "favorite_broadcast" }}⭐
+                                                    {{ else }}🔔{{ end }}
+                                                </span>
+                                                <h5 class="mb-0 {{ if .IsRead }}text-muted{{ else }}fw-bold{{ end }}">
+                                                    {{ .Title }}
+                                                </h5>
+                                            </div>
+
+                                            <p class="mb-2">{{ .Message }}</p>
+
+                                            <div class="d-flex align-items-center text-muted small">
+                                                <i class="fas fa-clock me-1"></i>
+                                                <span>{{ .CreatedAt.Format "2006/01/02 15:04" }}</span>
+                                                {{ if .IsRead }}
+                                                    <span class="ms-3">
+                                                        <i class="fas fa-check-circle me-1"></i>既読
+                                                    </span>
+                                                {{ end }}
+                                            </div>
+                                        </div>
+
+                                        {{ if not .IsRead }}
+                                            <form action="/api/notifications/mark-read" method="POST" class="ms-3">
+                                                <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
+                                                <input type="hidden" name="notification_id" value="{{ .ID }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-check"></i> 既読
+                                                </button>
+                                            </form>
+                                        {{ end }}
+                                    </div>
+                                </div>
+                            {{ end }}
+                        </div>
+                    {{ end }}
+                    {{ end }}
+                </div>
+
+                {{ with .Data }}
+                {{ $notifications := index . "Notifications" }}
+                {{ if $notifications }}
+                    <div class="card-footer text-muted text-center">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            通知は30日間保存されます
+                        </small>
+                    </div>
+                {{ end }}
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.list-group-item {
+    transition: all 0.3s ease;
+}
+.list-group-item:hover {
+    transform: translateX(5px);
+}
+</style>
+{{ end }}

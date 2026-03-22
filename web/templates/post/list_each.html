@@ -1,0 +1,42 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>レビュー一覧</title>
+
+{{ with .Data }}
+{{ $posts := index . "Posts" }}
+{{ $programTitle := index . "ProgramTitle" }}
+{{ $stationID := index . "StationID" }}
+{{ $programRating := index . "ProgramRating" }}
+
+{{ if $posts }}
+<h3 class="caption">{{ $programTitle }}</h3>
+
+{{ if $programRating }}
+<div class="program-rating">
+    <span class="rating-value">★ {{ $programRating }}</span>
+</div>
+{{ end }}
+
+{{ range $posts }}
+<br>
+<div class="card">
+    <div class="card-header">
+        {{ .Title }}
+    </div>
+    <div class="card-body">
+        {{ .Body }}
+    </div>
+    <div class="card-footer card_review_footer">
+        <span class="review_meta">
+            投稿日: {{ .CreatedAt.Format "2006年01月02日" }}
+        </span>
+    </div>
+</div>
+{{ end }}
+
+{{ else }}
+<h3 class="caption">レビューがまだありません</h3>
+{{ end }}
+{{ end }}
+{{ end }}

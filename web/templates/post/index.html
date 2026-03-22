@@ -1,0 +1,54 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>番組一覧</title>
+
+<div class="container">
+    {{ with .Data }}
+    {{ $results := index . "Results" }}
+    {{ $total := index . "Total" }}
+
+    {{ if $results }}
+    <h3 class="caption">番組一覧（{{ $total }}件）</h3>
+
+    <div class="mb-3">
+        <form method="get" action="/posts" class="row g-3">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" placeholder="番組名または出演者で検索" value="{{ index $ "Search" }}">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> 検索
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select name="per_page" class="form-select" onchange="this.form.submit()">
+                    <option value="10">10件表示</option>
+                    <option value="25">25件表示</option>
+                    <option value="50" selected>50件表示</option>
+                    <option value="100">100件表示</option>
+                </select>
+            </div>
+        </form>
+    </div>
+
+    <div class="program-list">
+        {{ range $results }}
+        <div class="card">
+            <div class="card-header">
+                <a href="/programs/detail?station_id={{ .StationID }}&title={{ .Title }}">{{ .Title }}</a>
+            </div>
+            <div class="card-body">
+                <div class="program-cast">{{ .Cast }}</div>
+            </div>
+        </div>
+        {{ end }}
+    </div>
+    {{ else }}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> 表示する番組がありません。
+    </div>
+    {{ end }}
+    {{ end }}
+</div>
+{{ end }}

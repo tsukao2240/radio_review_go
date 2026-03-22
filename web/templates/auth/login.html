@@ -1,0 +1,43 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>ログイン</title>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">ログイン</div>
+
+                <div class="card-body">
+                    {{ if .Flash }}
+                    <div class="alert alert-danger">{{ .Flash }}</div>
+                    {{ end }}
+                    <form method="POST" action="/login">
+                        <input type="hidden" name="_csrf" value="{{ .CSRFToken }}">
+
+                        <div class="form-group row">
+                            <label for="email" class="col-md-4 col-form-label text-md-right">メールアドレス</label>
+                            <div class="col-md-6">
+                                <input id="email" type="email" class="form-control" name="email" required autocomplete="email" autofocus>
+                            </div>
+                        </div>
+
+                        <div class="form-group row">
+                            <label for="password" class="col-md-4 col-form-label text-md-right">パスワード</label>
+                            <div class="col-md-6">
+                                <input id="password" type="password" class="form-control" name="password" required autocomplete="current-password">
+                            </div>
+                        </div>
+
+                        <div class="form-group row mb-0">
+                            <div class="col-md-8 offset-md-4">
+                                <button type="submit" class="btn btn-primary">ログイン</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

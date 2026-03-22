@@ -1,0 +1,114 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>録音履歴</title>
+
+<div class="container mt-4">
+    <div class="recording-header">
+        <h3>録音履歴</h3>
+    </div>
+
+    {{ with .Data }}
+    {{ $recordings := index . "recordings" }}
+    {{ if $recordings }}
+        <div class="recording-list">
+            {{ range $recordings }}
+                <div class="recording-card">
+                    <div class="recording-card-header">
+                        <div class="recording-title">{{ .ProgramName }}</div>
+                        <div>
+                            {{ if eq .Status "recording" }}
+                                <span class="recording-status status-recording">
+                                    <i class="fas fa-circle"></i> 録音中
+                                </span>
+                            {{ else if eq .Status "completed" }}
+                                <span class="recording-status status-completed">
+                                    <i class="fas fa-check-circle"></i> 完了
+                                </span>
+                            {{ else }}
+                                <span class="recording-status status-failed">{{ .Status }}</span>
+                            {{ end }}
+                        </div>
+                    </div>
+
+                    <div class="recording-meta">
+                        <div class="meta-item">
+                            <i class="fas fa-broadcast-tower"></i>
+                            {{ .StationID }}
+                        </div>
+                        <div class="meta-item">
+                            <i class="far fa-clock"></i>
+                            {{ .CreatedAt }}
+                        </div>
+                    </div>
+
+                    {{ if eq .Status "completed" }}
+                        <div class="recording-actions">
+                            <a href="/recording/download?recording_id={{ .RecordingID }}" class="btn-download">
+                                <i class="fas fa-download"></i> ダウンロード
+                            </a>
+                            <button class="btn-delete-recording delete-recording-btn"
+                                    data-recording-id="{{ .RecordingID }}"
+                                    data-filename="{{ .ProgramName }}">
+                                <i class="fas fa-trash"></i> 削除
+                            </button>
+                        </div>
+                    {{ else if eq .Status "recording" }}
+                        <div class="text-muted" style="margin-top: 10px;">
+                            <i class="fas fa-spinner fa-spin"></i> 録音中...
+                        </div>
+                    {{ end }}
+                </div>
+            {{ end }}
+        </div>
+    {{ else }}
+        <div class="empty-state">
+            <i class="fas fa-microphone-slash"></i>
+            <p>録音履歴がありません</p>
+        </div>
+    {{ end }}
+    {{ end }}
+
+    <div class="back-button">
+        <a href="/programs/schedule" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> 放送中の番組に戻る
+        </a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.delete-recording-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const recordingId = this.dataset.recordingId;
+            const filename = this.dataset.filename;
+
+            if (!confirm(filename + ' を削除しますか？この操作は取り消せません。')) {
+                return;
+            }
+
+            fetch('/recording/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ recording_id: recordingId })
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (!data.error) {
+                    alert('録音ファイルを削除しました');
+                    location.reload();
+                } else {
+                    alert('削除に失敗しました: ' + data.error);
+                }
+            })
+            .catch(function(error) {
+                alert('エラーが発生しました: ' + error);
+            });
+        });
+    });
+});
+</script>
+{{ end }}

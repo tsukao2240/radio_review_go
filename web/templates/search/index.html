@@ -1,0 +1,81 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>番組検索</title>
+
+<div class="max-w-7xl mx-auto">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-3">
+            <i class="fas fa-search mr-2"></i>番組検索
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400">番組名で検索できます</p>
+    </div>
+
+    <!-- 検索フォーム -->
+    <div class="mb-12">
+        <div class="relative w-full max-w-2xl mx-auto">
+            <form method="GET" action="/search" class="relative">
+                <div class="flex items-center bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border-2 border-transparent focus-within:border-primary-500 transition-all">
+                    <input
+                        type="text"
+                        name="title"
+                        value="{{ with .Data }}{{ index . "Keyword" }}{{ end }}"
+                        placeholder="番組名を入力してください"
+                        class="flex-1 px-4 py-3 md:px-6 md:py-4 text-base md:text-lg focus:outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 border-0"
+                        autocomplete="off"
+                        autofocus
+                    />
+                    <button
+                        type="submit"
+                        class="touch-target px-6 md:px-8 bg-primary-500 hover:bg-primary-600 text-white font-semibold transition">
+                        <i class="fas fa-search"></i>
+                        <span class="ml-2 hidden md:inline">検索</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 検索結果 -->
+    {{ with .Data }}
+    {{ $results := index . "Results" }}
+    {{ $keyword := index . "Keyword" }}
+    {{ $total := index . "Total" }}
+
+    {{ if $keyword }}
+    {{ if $results }}
+    <div class="mb-6">
+        <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4">
+            検索結果: 「{{ $keyword }}」（{{ $total }}件）
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {{ range $results }}
+            <div class="card-base">
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
+                    <a href="/programs/detail?station_id={{ .StationID }}&title={{ .Title }}&from=search&keyword={{ $keyword }}"
+                       class="hover:underline hover:text-primary-600 transition">
+                        {{ .Title }}
+                    </a>
+                </h3>
+                {{ if .Cast }}
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    <i class="fas fa-microphone mr-1"></i>{{ .Cast }}
+                </p>
+                {{ end }}
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <i class="fas fa-radio mr-1"></i>{{ .StationID }}
+                </p>
+            </div>
+            {{ end }}
+        </div>
+    </div>
+    {{ else }}
+    <div class="card-base text-center py-12">
+        <i class="fas fa-search text-4xl text-gray-400 mb-4"></i>
+        <p class="text-gray-600 dark:text-gray-400">「{{ $keyword }}」に一致する番組が見つかりませんでした。</p>
+    </div>
+    {{ end }}
+    {{ end }}
+    {{ end }}
+</div>
+{{ end }}
