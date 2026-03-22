@@ -64,6 +64,16 @@ type NotificationServiceInterface interface {
 	MarkAllAsRead(userID int64) error
 }
 
+// RecommendationServiceInterface - レコメンデーション機能
+type RecommendationServiceInterface interface {
+	// GetRecommendations はユーザーへのパーソナライズされたレコメンデーションを返す（Redisキャッシュ30分）。
+	GetRecommendations(userID int64) ([]map[string]interface{}, error)
+	// GetTrendingPrograms は直近 days 日間で高評価レビューが多いトレンド番組を返す。
+	GetTrendingPrograms(days, limit int) ([]map[string]interface{}, error)
+	// ClearUserCache はユーザーのレコメンデーションキャッシュを削除する。
+	ClearUserCache(userID int64) error
+}
+
 // RecordingScheduleServiceInterface - 録音予約管理
 type RecordingScheduleServiceInterface interface {
 	GetByUser(userID int64) ([]model.RecordingSchedule, error)

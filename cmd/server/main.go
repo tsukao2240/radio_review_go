@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -16,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/yourname/radio_review_go/internal/handler"
+	"github.com/yourname/radio_review_go/internal/job"
 	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
 	"github.com/yourname/radio_review_go/internal/repository"
 	"github.com/yourname/radio_review_go/internal/service"
@@ -23,6 +27,9 @@ import (
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found, using environment variables")
 	}
@@ -65,6 +72,7 @@ func main() {
 	favSvc := service.NewFavoriteService(favRepo)
 	notifSvc := service.NewNotificationService(notifRepo)
 	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
+	recommendSvc := service.NewRecommendationService(postRepo, programRepo, favRepo, rdb)
 
 	// --- Radiko client ---
 	keyPath := "storage/keys/radiko_auth_key.txt"
@@ -92,6 +100,11 @@ func main() {
 	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
+	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
+
+	// --- Background jobs ---
+	scheduler := job.NewScheduler(db, rdb, radikoClient, hlsDownloader, storagePath)
+	go scheduler.Start(ctx)
 
 	// --- Router ---
 	r := chi.NewRouter()
@@ -175,6 +188,14 @@ func main() {
 		r.Get("/api/notifications/all", notifHandler.GetAll)
 		r.Post("/api/notifications/mark-read", notifHandler.MarkAsRead)
 		r.Post("/api/notifications/mark-all-read", notifHandler.MarkAllAsRead)
+	})
+
+	// レコメンデーション（認証必須）
+	r.Group(func(r chi.Router) {
+		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/recommendations", recommendHandler.Index)
+		r.Get("/api/recommendations", recommendHandler.GetRecommendations)
+		r.Post("/api/recommendations/refresh", recommendHandler.Refresh)
 	})
 
 	// 投稿インタラクション API（認証必須）

@@ -1,0 +1,188 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>おすすめ番組</title>
+
+<div class="container mt-4">
+    <h2 class="mb-4">
+        <i class="fas fa-star text-warning"></i> おすすめ番組
+    </h2>
+
+    {{ with .Data }}
+    {{ $recommendations := index . "Recommendations" }}
+    {{ $trending := index . "Trending" }}
+
+    <div class="row">
+        <!-- パーソナライズ推薦 -->
+        <div class="col-lg-6 mb-4">
+            <div class="recommendations-section card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user-circle"></i> あなたへのおすすめ
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {{ if $recommendations }}
+                        {{ range $recommendations }}
+                        <div class="recommendation-card border-bottom p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="program-title mb-1">{{ index . "title" }}</h5>
+                                    <p class="program-station text-muted mb-1">
+                                        <i class="fas fa-broadcast-tower"></i> {{ index . "station_id" }}
+                                    </p>
+                                    {{ with index . "cast" }}
+                                        <p class="program-cast small mb-1">
+                                            <i class="fas fa-microphone"></i> {{ . }}
+                                        </p>
+                                    {{ end }}
+                                    {{ with index . "avg_rating" }}
+                                        <div class="mt-2">
+                                            <span class="badge bg-warning text-dark">
+                                                ★ {{ . }}
+                                            </span>
+                                            {{ with index $ "reviews_count" }}
+                                                <small class="text-muted">({{ . }}件)</small>
+                                            {{ end }}
+                                        </div>
+                                    {{ end }}
+                                </div>
+                                <div>
+                                    <a href="/programs/detail?station_id={{ index . "station_id" }}&title={{ index . "title" }}"
+                                       class="btn btn-sm btn-outline-primary">
+                                        詳細 <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {{ end }}
+                    {{ else }}
+                        <div class="text-center py-5">
+                            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">
+                                お気に入り登録や高評価レビューをすると<br>
+                                あなたにぴったりの番組をおすすめします！
+                            </p>
+                            <a href="/favorites" class="btn btn-primary mt-2">
+                                <i class="fas fa-heart"></i> お気に入りを登録する
+                            </a>
+                        </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+
+        <!-- トレンド番組 -->
+        <div class="col-lg-6 mb-4">
+            <div class="recommendations-section card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-fire text-danger"></i> 話題の番組
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {{ if $trending }}
+                        {{ range $trending }}
+                        <div class="recommendation-card border-bottom p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h5 class="program-title mb-1">{{ index . "title" }}</h5>
+                                    <p class="program-station text-muted mb-1">
+                                        <i class="fas fa-broadcast-tower"></i> {{ index . "station_id" }}
+                                    </p>
+                                    {{ with index . "cast" }}
+                                        <p class="program-cast small mb-1">
+                                            <i class="fas fa-microphone"></i> {{ . }}
+                                        </p>
+                                    {{ end }}
+                                    {{ with index . "avg_rating" }}
+                                        <div class="mt-2">
+                                            <span class="badge bg-danger text-white">
+                                                🔥 ★ {{ . }}
+                                            </span>
+                                            {{ with index $ "recent_reviews_count" }}
+                                                <small class="text-muted">(最近{{ . }}件)</small>
+                                            {{ end }}
+                                        </div>
+                                    {{ end }}
+                                </div>
+                                <div>
+                                    <a href="/programs/detail?station_id={{ index . "station_id" }}&title={{ index . "title" }}"
+                                       class="btn btn-sm btn-outline-danger">
+                                        詳細 <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {{ end }}
+                    {{ else }}
+                        <div class="text-center py-5">
+                            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">現在、話題の番組はありません</p>
+                        </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{ end }}
+
+    <!-- リフレッシュボタン -->
+    <div class="text-center mt-4">
+        <button type="button" id="refresh-btn" class="btn btn-outline-secondary">
+            <i class="fas fa-sync-alt"></i> おすすめを更新
+        </button>
+    </div>
+</div>
+
+<style>
+.recommendations-section .recommendation-card:last-child {
+    border-bottom: none !important;
+}
+.recommendation-card {
+    transition: background-color 0.2s;
+}
+.recommendation-card:hover {
+    background-color: #f8f9fa;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('refresh-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 更新中...';
+
+        var csrfToken = document.querySelector('meta[name="csrf-token"]');
+        var headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) {
+            headers['X-CSRF-TOKEN'] = csrfToken.getAttribute('content');
+        }
+
+        fetch('/api/recommendations/refresh', {
+            method: 'POST',
+            headers: headers,
+        })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('更新に失敗しました');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i> おすすめを更新';
+            }
+        })
+        .catch(function (err) {
+            alert('エラーが発生しました: ' + err);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> おすすめを更新';
+        });
+    });
+});
+</script>
+{{ end }}

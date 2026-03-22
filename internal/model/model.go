@@ -31,17 +31,19 @@ type Post struct {
 }
 
 // RadioProgram - radio_programs テーブル（Radikoキャッシュ）
-// timestamps なし（PHPで public $timestamps = false）
+// PHPモデルは timestamps=false だが実テーブルにはカラムが存在する
 type RadioProgram struct {
-	ID        int64   `db:"id"`
-	StationID string  `db:"station_id"`
-	Title     string  `db:"title"`
-	Cast      *string `db:"cast"`
-	Start     string  `db:"start"` // YYYYMMDDHHMM
-	End       string  `db:"end"`   // YYYYMMDDHHMM
-	Info      *string `db:"info"`
-	URL       *string `db:"url"`
-	Image     *string `db:"image"`
+	ID        int64      `db:"id"`
+	StationID string     `db:"station_id"`
+	Title     string     `db:"title"`
+	Cast      *string    `db:"cast"`
+	Start     string     `db:"start"` // YYYYMMDDHHMM
+	End       string     `db:"end"`   // YYYYMMDDHHMM
+	Info      *string    `db:"info"`
+	URL       *string    `db:"url"`
+	Image     *string    `db:"image"`
+	CreatedAt *time.Time `db:"created_at"`
+	UpdatedAt *time.Time `db:"updated_at"`
 }
 
 // FavoriteProgram - favorite_programs テーブル
