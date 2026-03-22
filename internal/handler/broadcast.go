@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yourname/radio_review_go/internal/service"
@@ -52,27 +50,9 @@ func NewBroadcastHandler(
 
 // ---- ヘルパ ----
 
-// renderTemplate はテンプレートを描画する。テンプレートが存在しない場合は JSON にフォールバックする。
+// renderTemplate はテンプレートを描画する。base.html を含めてパースし "base" テンプレートを実行する。
 func renderTemplate(w http.ResponseWriter, tmplPath string, data interface{}) {
-	if _, err := os.Stat(tmplPath); os.IsNotExist(err) {
-		w.Header().Set("Content-Type", "application/json")
-		if encErr := json.NewEncoder(w).Encode(data); encErr != nil {
-			log.Printf("renderTemplate json encode error: %v", encErr)
-		}
-		return
-	}
-
-	t, err := template.ParseFiles(tmplPath)
-	if err != nil {
-		log.Printf("renderTemplate ParseFiles error: %v", err)
-		http.Error(w, "template error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := t.Execute(w, data); err != nil {
-		log.Printf("renderTemplate Execute error: %v", err)
-	}
+	RenderWithBase(w, tmplPath, data)
 }
 
 // respondJSON は JSON レスポンスを返す共通ヘルパー

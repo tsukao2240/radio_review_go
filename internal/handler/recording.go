@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -362,22 +361,9 @@ func (h *RecordingHandler) ShowHistory(store sessions.Store) http.HandlerFunc {
 			recordings = []model.RecordingInfo{}
 		}
 
-		tmplPath := "web/templates/recording/history.html"
-		tmpl, tmplErr := template.ParseFiles(tmplPath)
-		if tmplErr != nil {
-			// テンプレートが存在しない場合は JSON で代替
-			writeJSON(w, http.StatusOK, map[string]interface{}{
-				"recordings": recordings,
-			})
-			return
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := tmpl.Execute(w, map[string]interface{}{
+		RenderWithBase(w, "web/templates/recording/history.html", map[string]interface{}{
 			"recordings": recordings,
-		}); err != nil {
-			writeError(w, http.StatusInternalServerError, "テンプレートのレンダリングに失敗しました: "+err.Error())
-		}
+		})
 	}
 }
 

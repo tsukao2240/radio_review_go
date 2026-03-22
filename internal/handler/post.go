@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"html/template"
 	"net/http"
 	"strconv"
 
@@ -34,15 +33,7 @@ func NewPostHandler(
 
 // renderOrJSON はテンプレートをレンダリングし、存在しない場合は JSON で代替する。
 func renderOrJSON(w http.ResponseWriter, tmplPath string, data interface{}) {
-	tmpl, err := template.ParseFiles(tmplPath)
-	if err != nil {
-		writeJSON(w, http.StatusOK, data)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.Execute(w, data); err != nil {
-		writeError(w, http.StatusInternalServerError, "テンプレートのレンダリングに失敗しました: "+err.Error())
-	}
+	RenderWithBase(w, tmplPath, data)
 }
 
 // IndexPrograms は GET /program を処理する。番組一覧（検索付き）。

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"html/template"
 	"net/http"
 
 	"github.com/gorilla/sessions"
@@ -29,28 +28,7 @@ func NewAuthHandler(userRepo repository.UserRepositoryInterface, store sessions.
 // ShowLogin は GET /login を処理する。
 // ログインフォームの HTML テンプレートを返す。
 func (h *AuthHandler) ShowLogin(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("web/templates/auth/login.html")
-	if err != nil {
-		// テンプレートが存在しない場合はシンプルな HTML を直書き
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>ログイン</title></head>
-<body>
-<h1>ログイン</h1>
-<form method="POST" action="/login">
-  <label>メールアドレス: <input type="email" name="email" required></label><br>
-  <label>パスワード: <input type="password" name="password" required></label><br>
-  <button type="submit">ログイン</button>
-</form>
-<p><a href="/register">新規登録はこちら</a></p>
-</body>
-</html>`))
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = tmpl.Execute(w, nil)
+	RenderWithBase(w, "web/templates/auth/login.html", nil)
 }
 
 // Login は POST /login を処理する。
@@ -113,30 +91,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // ShowRegister は GET /register を処理する。
 // ユーザー登録フォームの HTML テンプレートを返す。
 func (h *AuthHandler) ShowRegister(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("web/templates/auth/register.html")
-	if err != nil {
-		// テンプレートが存在しない場合はシンプルな HTML を直書き
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>新規登録</title></head>
-<body>
-<h1>新規登録</h1>
-<form method="POST" action="/register">
-  <label>名前: <input type="text" name="name" required></label><br>
-  <label>メールアドレス: <input type="email" name="email" required></label><br>
-  <label>パスワード: <input type="password" name="password" required></label><br>
-  <label>パスワード確認: <input type="password" name="password_confirmation" required></label><br>
-  <button type="submit">登録</button>
-</form>
-<p><a href="/login">ログインはこちら</a></p>
-</body>
-</html>`))
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = tmpl.Execute(w, nil)
+	RenderWithBase(w, "web/templates/auth/register.html", nil)
 }
 
 // Register は POST /register を処理する。
