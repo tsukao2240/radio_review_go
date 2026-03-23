@@ -225,3 +225,37 @@ func TestNotificationHandler_GetAll(t *testing.T) {
 		}
 	})
 }
+
+func TestNotificationHandler_MarkAsRead_Unauthorized(t *testing.T) {
+	h := NewNotificationHandler(&stubNotifService{}, nil)
+	body, _ := json.Marshal(map[string]int64{"notification_id": 1})
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/mark-read", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.MarkAsRead(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("got %d, want 401", rr.Code)
+	}
+}
+
+func TestNotificationHandler_MarkAllAsRead_Unauthorized(t *testing.T) {
+	h := NewNotificationHandler(&stubNotifService{}, nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/mark-all-read", nil)
+	rr := httptest.NewRecorder()
+	h.MarkAllAsRead(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("got %d, want 401", rr.Code)
+	}
+}
+
+func TestNotificationHandler_MarkAllAsRead_ServiceError(t *testing.T) {
+	svc := &stubNotifService{
+		markAllReadFunc: func(_ int64) error { return errors.New("db error") },
+	}
+	h := NewNotificationHandler(svc, nil)
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/notifications/mark-all-read", nil), 1)
+	rr := httptest.NewRecorder()
+	h.MarkAllAsRead(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}

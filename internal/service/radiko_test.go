@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
@@ -225,4 +226,110 @@ func TestCacheGetSetRadiko(t *testing.T) {
 			t.Error("expected false for invalid JSON")
 		}
 	})
+}
+
+func TestRadikoApiService_GetWeeklySchedule_CacheHit(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	cached := []map[string]interface{}{
+		{"broadcast_name": "TBSラジオ", "station_id": "TBS", "entries": nil},
+	}
+	b, _ := json.Marshal(cached)
+	rdb.Set(context.Background(), "weekly_schedule_TBS", string(b), time.Minute)
+
+	result, err := svc.GetWeeklySchedule("TBS")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result from cache, got %d", len(result))
+	}
+	if result[0]["broadcast_name"] != "TBSラジオ" {
+		t.Errorf("unexpected result: %v", result[0])
+	}
+}
+
+func TestRadikoApiService_GetTwoWeekSchedule_CacheHit(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	cached := []map[string]interface{}{
+		{"broadcast_name": "文化放送", "station_id": "QRR", "entries": nil},
+	}
+	b, _ := json.Marshal(cached)
+	rdb.Set(context.Background(), "radiko_two_week_schedule_QRR", string(b), time.Minute)
+
+	result, err := svc.GetTwoWeekSchedule("QRR")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestRadikoApiService_GetCurrentPrograms_CacheHit(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	cached := []map[string]interface{}{
+		{"station_id": "TBS", "title": "jazz show"},
+		{"station_id": "QRR", "title": "morning talk"},
+	}
+	b, _ := json.Marshal(cached)
+	rdb.Set(context.Background(), "radiko_current_programs", string(b), time.Minute)
+
+	result, err := svc.GetCurrentPrograms()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 programs from cache, got %d", len(result))
+	}
+}
+
+func TestRadikoApiService_GetProgramDetails_CacheHit(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	titleHash := md5Hex("jazz show")
+	cacheKey := "radiko_program_details_TBS_" + titleHash
+	cachedDetail := map[string]interface{}{
+		"title": "jazz show", "station_id": "TBS",
+	}
+	b, _ := json.Marshal(cachedDetail)
+	rdb.Set(context.Background(), cacheKey, string(b), time.Minute)
+
+	result, err := svc.GetProgramDetails("TBS", "jazz show")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["title"] != "jazz show" {
+		t.Errorf("expected title='jazz show', got %v", result["title"])
+	}
 }

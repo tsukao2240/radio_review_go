@@ -229,3 +229,145 @@ func TestDownloadTimefree_NoSegments(t *testing.T) {
 		t.Errorf("expected 0 segments, got %d", len(segments))
 	}
 }
+
+func TestDownloadTimefree_FullFlow(t *testing.T) {
+	seg1 := []byte("audio-segment-1")
+	seg2 := []byte("audio-segment-2")
+
+	m3u8 := "#EXTM3U\n#EXTINF:15.0,\nseg1.ts\n#EXTINF:15.0,\nseg2.ts\n#EXT-X-ENDLIST\n"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "playlist.m3u8"):
+			fmt.Fprint(w, m3u8)
+		case strings.HasSuffix(r.URL.Path, "seg1.ts"):
+			w.Write(seg1)
+		case strings.HasSuffix(r.URL.Path, "seg2.ts"):
+			w.Write(seg2)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	// Override playlistURL by testing through fetchSegmentURLs + download
+	d := &HLSDownloader{client: newTestClient(srv.Client()), maxParallel: 2}
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "output.aac")
+
+	// Test: fetch segments then download each
+	segments, err := d.fetchSegmentURLs(context.Background(), srv.URL+"/playlist.m3u8", "tok")
+	if err != nil {
+		t.Fatalf("fetchSegmentURLs: %v", err)
+	}
+	if len(segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(segments))
+	}
+
+	// Write segments to file manually (same as DownloadTimefree logic)
+	f, err := os.Create(outPath)
+	if err != nil {
+		t.Fatalf("os.Create: %v", err)
+	}
+	for _, u := range segments {
+		data, err := d.fetchSegment(context.Background(), u, "tok")
+		if err != nil {
+			f.Close()
+			t.Fatalf("fetchSegment: %v", err)
+		}
+		f.Write(data)
+	}
+	f.Close()
+
+	got, _ := os.ReadFile(outPath)
+	want := append(seg1, seg2...)
+	if string(got) != string(want) {
+		t.Errorf("output mismatch: got %q, want %q", got, want)
+	}
+}
+
+// roundTripFunc はカスタム http.RoundTripper。
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestHLSDownloader_DownloadTimefree(t *testing.T) {
+	seg1 := []byte("ts-data-1")
+	seg2 := []byte("ts-data-2")
+
+	var srvAddr string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "playlist.m3u8"):
+			// Return absolute segment URLs using the server address
+			base := "http://" + srvAddr
+			fmt.Fprintf(w, "#EXTM3U\n#EXTINF:15.0,\n%s/seg1.ts\n#EXTINF:15.0,\n%s/seg2.ts\n#EXT-X-ENDLIST\n",
+				base, base)
+		case strings.HasSuffix(r.URL.Path, "seg1.ts"):
+			w.Write(seg1)
+		case strings.HasSuffix(r.URL.Path, "seg2.ts"):
+			w.Write(seg2)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	srvAddr = srv.Listener.Addr().String()
+	defer srv.Close()
+
+	// Create a client that redirects all requests to srv
+	testTransport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		// Rewrite host to srv
+		req2 := req.Clone(req.Context())
+		req2.URL.Scheme = "http"
+		req2.URL.Host = srv.Listener.Addr().String()
+		return srv.Client().Transport.RoundTrip(req2)
+	})
+	testHTTPClient := &http.Client{Transport: testTransport}
+
+	d := &HLSDownloader{client: newTestClient(testHTTPClient), maxParallel: 2}
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "timefree.aac")
+
+	err := d.DownloadTimefree(context.Background(), "test-token", "TBS", "20240101100000", "20240101110000", outPath)
+	if err != nil {
+		t.Fatalf("DownloadTimefree: %v", err)
+	}
+
+	got, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	want := append(seg1, seg2...)
+	if string(got) != string(want) {
+		t.Errorf("output mismatch: got %q, want %q", got, want)
+	}
+}
+
+func TestHLSDownloader_DownloadTimefree_EmptyPlaylist(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "#EXTM3U\n#EXT-X-ENDLIST\n")
+	}))
+	defer srv.Close()
+
+	testTransport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req2 := req.Clone(req.Context())
+		req2.URL.Scheme = "http"
+		req2.URL.Host = srv.Listener.Addr().String()
+		return srv.Client().Transport.RoundTrip(req2)
+	})
+	testHTTPClient := &http.Client{Transport: testTransport}
+
+	d := &HLSDownloader{client: newTestClient(testHTTPClient), maxParallel: 2}
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "empty.aac")
+
+	err := d.DownloadTimefree(context.Background(), "tok", "TBS", "20240101100000", "20240101110000", outPath)
+	if err == nil {
+		t.Error("expected error for empty playlist, got nil")
+	}
+}

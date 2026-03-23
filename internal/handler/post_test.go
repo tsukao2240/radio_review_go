@@ -460,3 +460,46 @@ func TestPostHandler_DeleteComment(t *testing.T) {
 		}
 	})
 }
+
+func TestPostHandler_UnlikePost_Success(t *testing.T) {
+	svc := &stubInteractionService{
+		unlikeFunc: func(_, _ int64) error { return nil },
+	}
+	h := NewPostHandler(&stubPostService{}, svc, nil)
+	body, _ := json.Marshal(map[string]int64{"post_id": 3})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/unlike", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.UnlikePost(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestPostHandler_UnlikePost_ServiceError(t *testing.T) {
+	svc := &stubInteractionService{
+		unlikeFunc: func(_, _ int64) error { return errors.New("unlike error") },
+	}
+	h := NewPostHandler(&stubPostService{}, svc, nil)
+	body, _ := json.Marshal(map[string]int64{"post_id": 3})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/unlike", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.UnlikePost(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestPostHandler_GetComments_ServiceError(t *testing.T) {
+	svc := &stubInteractionService{
+		getCommentsFunc: func(_ int64) ([]model.PostComment, error) {
+			return nil, errors.New("db error")
+		},
+	}
+	h := NewPostHandler(&stubPostService{}, svc, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/posts/comments?post_id=1", nil)
+	rr := httptest.NewRecorder()
+	h.GetComments(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
