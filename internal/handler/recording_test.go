@@ -232,6 +232,42 @@ func TestGetRecordingStatus_MissingID(t *testing.T) {
 	}
 }
 
+func TestGetRecordingStatus_NotFound(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	req := httptest.NewRequest(http.MethodGet, "/recording/status?recording_id=nonexistent", nil)
+	rr := httptest.NewRecorder()
+	h.GetRecordingStatus(store)(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("got %d, want 404", rr.Code)
+	}
+}
+
+func TestGetRecordingStatus_Forbidden(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "st_forbid",
+		OwnerKey:    "user_2",
+		Status:      "completed",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_st_forbid", string(data), 0)
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/status?recording_id=st_forbid", nil), 1) // user_1
+	rr := httptest.NewRecorder()
+	h.GetRecordingStatus(store)(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("got %d, want 403", rr.Code)
+	}
+}
+
 func TestGetRecordingStatus_Success(t *testing.T) {
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
@@ -418,6 +454,38 @@ func TestListRecordings_Empty(t *testing.T) {
 	var resp map[string]interface{}
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode error: %v", err)
+	}
+}
+
+func TestListRecordings_RedisError(t *testing.T) {
+	mr, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	mr.Close() // close Redis to trigger scan error
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/list", nil), 1)
+	rr := httptest.NewRecorder()
+	h.ListRecordings(store)(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestShowHistory_RedisError(t *testing.T) {
+	mr, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	mr.Close() // close Redis to trigger scan error
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/history", nil), 1)
+	rr := httptest.NewRecorder()
+	h.ShowHistory(store)(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
 	}
 }
 

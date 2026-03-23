@@ -683,6 +683,77 @@ func TestPostService_GetPostByID(t *testing.T) {
 	})
 }
 
+func TestPostService_GetPostsFiltered_CountError(t *testing.T) {
+	repoErr := errors.New("count error")
+	postRepo := &stubPostRepo{
+		findFilteredFunc: func(_ map[string]interface{}, _, _ int) ([]model.Post, error) {
+			return []model.Post{{ID: 1}}, nil
+		},
+		countFilteredFunc: func(_ map[string]interface{}) (int, error) { return 0, repoErr },
+	}
+	svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+	_, _, err := svc.GetPostsFiltered(nil, 10, 1)
+	if !errors.Is(err, repoErr) {
+		t.Errorf("expected repoErr, got %v", err)
+	}
+}
+
+func TestPostService_UpdatePost_UserIDTypeVariants(t *testing.T) {
+	// float64 user_id (matches post.UserID=1 when uid=1.0)
+	t.Run("float64 user_id: 正常更新", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, UserID: 1}, nil
+			},
+			updateFunc: func(post *model.Post) error { return nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		data := map[string]interface{}{
+			"user_id": float64(1),
+			"title":   "updated",
+			"rating":  int(4),
+		}
+		if err := svc.UpdatePost(1, data); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("int user_id and int64 rating: 正常更新", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, UserID: 1}, nil
+			},
+			updateFunc: func(post *model.Post) error { return nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		data := map[string]interface{}{
+			"user_id": int(1),
+			"title":   "updated",
+			"rating":  int64(4),
+		}
+		if err := svc.UpdatePost(1, data); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("float32 rating: 正常更新", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, UserID: 1}, nil
+			},
+			updateFunc: func(post *model.Post) error { return nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		data := map[string]interface{}{
+			"user_id": int64(1),
+			"rating":  float32(3.5),
+		}
+		if err := svc.UpdatePost(1, data); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestPostService_UpdatePost_TagReplace(t *testing.T) {
 	t.Run("tag_ids が渡された場合: 既存タグ削除後に新規タグを付与", func(t *testing.T) {
 		var detachedTags []int64

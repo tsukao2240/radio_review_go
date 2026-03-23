@@ -11,6 +11,48 @@ import (
 	"github.com/gorilla/sessions"
 )
 
+func TestRenderWithBase_Success(t *testing.T) {
+	// Create a temporary directory structure with fake templates
+	dir := t.TempDir()
+
+	// Create web/templates/layouts/base.html
+	baseDir := filepath.Join(dir, "web/templates/layouts")
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	baseContent := `{{define "base"}}BASE:{{block "content" .}}{{end}}{{end}}`
+	if err := os.WriteFile(filepath.Join(baseDir, "base.html"), []byte(baseContent), 0600); err != nil {
+		t.Fatalf("WriteFile base: %v", err)
+	}
+
+	// Create the page template
+	pageContent := `{{define "content"}}PAGE{{end}}`
+	pagePath := filepath.Join(dir, "page.html")
+	if err := os.WriteFile(pagePath, []byte(pageContent), 0600); err != nil {
+		t.Fatalf("WriteFile page: %v", err)
+	}
+
+	// Change to temp dir so baseTmpl ("web/templates/layouts/base.html") resolves
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	// Restore working directory after test
+	origDir, _ := os.Getwd()
+	t.Cleanup(func() { os.Chdir(origDir) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	RenderWithBase(rr, req, pagePath, nil)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+	ct := rr.Header().Get("Content-Type")
+	if ct != "text/html; charset=utf-8" {
+		t.Errorf("expected text/html, got %q", ct)
+	}
+}
+
 func TestGenerateCSRFToken(t *testing.T) {
 	token := generateCSRFToken()
 	if token == "" {

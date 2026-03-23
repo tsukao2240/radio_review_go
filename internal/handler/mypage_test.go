@@ -221,6 +221,40 @@ func TestMypageHandler_Update(t *testing.T) {
 		}
 	})
 
+	t.Run("無効なID: 400", func(t *testing.T) {
+		h := NewMypageHandler(&stubPostService{}, store)
+		r := chi.NewRouter()
+		r.Post("/my/edit/{program_id}", h.Update)
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/my/edit/abc", nil), 1)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("got %d, want 400", rr.Code)
+		}
+	})
+
+	t.Run("rating=0はデフォルト3.0に補正", func(t *testing.T) {
+		svc := &stubPostService{
+			updatePostFunc: func(_ int64, data map[string]interface{}) error {
+				if data["rating"] != 3.0 {
+					return errors.New("rating should default to 3.0")
+				}
+				return nil
+			},
+		}
+		h := NewMypageHandler(svc, store)
+		r := chi.NewRouter()
+		r.Post("/my/edit/{program_id}", h.Update)
+		form := url.Values{"title": {"t"}, "body": {"b"}, "rating": {"0"}}
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/my/edit/1", strings.NewReader(form.Encode())), 1)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusFound {
+			t.Errorf("got %d, want 302", rr.Code)
+		}
+	})
+
 	t.Run("正常更新: /myにリダイレクト", func(t *testing.T) {
 		svc := &stubPostService{
 			updatePostFunc: func(postID int64, data map[string]interface{}) error { return nil },
@@ -283,6 +317,35 @@ func TestMypageHandler_Destroy(t *testing.T) {
 		}
 	})
 
+	t.Run("無効な post_id: 400", func(t *testing.T) {
+		h := NewMypageHandler(&stubPostService{}, store)
+		form := url.Values{"post_id": {"not-a-number"}}
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/my", strings.NewReader(form.Encode())), 1)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rr := httptest.NewRecorder()
+		h.Destroy(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("got %d, want 400", rr.Code)
+		}
+	})
+
+	t.Run("投稿が見つからない: 404", func(t *testing.T) {
+		svc := &stubPostService{
+			getPostByIDFunc: func(postID int64) (*model.Post, error) {
+				return nil, errors.New("not found")
+			},
+		}
+		h := NewMypageHandler(svc, store)
+		form := url.Values{"post_id": {"1"}}
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/my", strings.NewReader(form.Encode())), 1)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rr := httptest.NewRecorder()
+		h.Destroy(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("got %d, want 404", rr.Code)
+		}
+	})
+
 	t.Run("他ユーザーの投稿削除: 403", func(t *testing.T) {
 		svc := &stubPostService{
 			getPostByIDFunc: func(postID int64) (*model.Post, error) {
@@ -297,6 +360,26 @@ func TestMypageHandler_Destroy(t *testing.T) {
 		h.Destroy(rr, req)
 		if rr.Code != http.StatusForbidden {
 			t.Errorf("got %d, want 403", rr.Code)
+		}
+	})
+
+	t.Run("削除サービスエラー: 500", func(t *testing.T) {
+		svc := &stubPostService{
+			getPostByIDFunc: func(postID int64) (*model.Post, error) {
+				return &model.Post{ID: postID, UserID: 1}, nil
+			},
+			deletePostFunc: func(postID int64) error {
+				return errors.New("delete error")
+			},
+		}
+		h := NewMypageHandler(svc, store)
+		form := url.Values{"post_id": {"1"}}
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/my", strings.NewReader(form.Encode())), 1)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rr := httptest.NewRecorder()
+		h.Destroy(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
 		}
 	})
 

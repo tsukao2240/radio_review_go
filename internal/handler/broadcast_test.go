@@ -325,6 +325,26 @@ func TestBroadcastHandler_GetTwoWeekScheduleByStation(t *testing.T) {
 			t.Errorf("got %d, want 200", rr.Code)
 		}
 	})
+
+	t.Run("エリア指定なし・entries に date あり: 200", func(t *testing.T) {
+		svc := &stubRadikoService{
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				entries := []map[string]interface{}{
+					{"date": "20261231", "title": "Test Show"},
+				}
+				return []map[string]interface{}{{"broadcast_name": "TBSラジオ", "entries": entries}}, nil
+			},
+		}
+		h := NewBroadcastHandler(svc, &stubSearchService{})
+		r := chi.NewRouter()
+		r.Get("/timefree/{station_id}", h.GetTwoWeekScheduleByStation)
+		req := httptest.NewRequest(http.MethodGet, "/timefree/TBS", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
 }
 
 func TestBroadcastHandler_GetTwoWeekScheduleSelect(t *testing.T) {
@@ -336,6 +356,57 @@ func TestBroadcastHandler_GetTwoWeekScheduleSelect(t *testing.T) {
 	// エラー時でも 200 OK（空の station list で表示）
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestBroadcastHandler_GetTwoWeekScheduleSelect_DefaultArea(t *testing.T) {
+	// area パラメータなし → JP13 がデフォルト
+	h := NewBroadcastHandler(&stubRadikoService{}, &stubSearchService{})
+	req := httptest.NewRequest(http.MethodGet, "/timefree", nil)
+	rr := httptest.NewRecorder()
+	h.GetTwoWeekScheduleSelect(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestFetchXMLHandler_HTTPError(t *testing.T) {
+	// 無効な URL → http.Get エラー
+	err := fetchXMLHandler("http://127.0.0.1:0/invalid", nil)
+	if err == nil {
+		t.Error("expected error for unreachable URL")
+	}
+}
+
+func TestFetchXMLHandler_XMLUnmarshalError(t *testing.T) {
+	// テストサーバーが JSON を返す → xml.Unmarshal エラー
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"not": "xml"}`))
+	}))
+	defer srv.Close()
+
+	var v struct{ Name string }
+	err := fetchXMLHandler(srv.URL, &v)
+	if err == nil {
+		t.Error("expected xml.Unmarshal error")
+	}
+}
+
+func TestFetchXMLHandler_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<root><Name>test</Name></root>`))
+	}))
+	defer srv.Close()
+
+	var v struct {
+		XMLName struct{} `xml:"root"`
+		Name    string
+	}
+	err := fetchXMLHandler(srv.URL, &v)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

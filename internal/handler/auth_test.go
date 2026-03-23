@@ -63,6 +63,16 @@ func TestAuthHandler_ShowLogin(t *testing.T) {
 	})
 }
 
+func TestAuthHandler_ShowLogin_ResetSuccess(t *testing.T) {
+	h := NewAuthHandler(&stubUserRepo{}, sessions.NewCookieStore([]byte("test")))
+	req := httptest.NewRequest(http.MethodGet, "/login?reset=1", nil)
+	rr := httptest.NewRecorder()
+	h.ShowLogin(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
 func TestAuthHandler_Login(t *testing.T) {
 	store := sessions.NewCookieStore([]byte("test-secret"))
 
@@ -116,6 +126,29 @@ func TestAuthHandler_Login(t *testing.T) {
 			t.Errorf("got %d, want 401", rr.Code)
 		}
 	})
+}
+
+func TestAuthHandler_Login_JSONBody(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test-secret"))
+	// Return nil user (not found) to test the JSON decode path
+	userRepo := &stubUserRepo{
+		findByEmailFunc: func(email string) (*model.User, error) {
+			return nil, nil
+		},
+	}
+	h := NewAuthHandler(userRepo, store)
+	body, _ := json.Marshal(map[string]string{
+		"email":    "json@example.com",
+		"password": "pass",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+	// user not found → 401
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("got %d, want 401", rr.Code)
+	}
 }
 
 func TestAuthHandler_Register(t *testing.T) {
@@ -215,6 +248,29 @@ func TestAuthHandler_Register_JSONBody(t *testing.T) {
 	h.Register(rr, req)
 	if rr.Code != http.StatusFound {
 		t.Errorf("got %d, want 302", rr.Code)
+	}
+}
+
+// stubFailStore は sessions.Get でエラーを返すスタブストア
+type stubFailStore struct{}
+
+func (s *stubFailStore) Get(r *http.Request, name string) (*sessions.Session, error) {
+	return nil, errors.New("store get error")
+}
+func (s *stubFailStore) New(r *http.Request, name string) (*sessions.Session, error) {
+	return nil, errors.New("store new error")
+}
+func (s *stubFailStore) Save(r *http.Request, w http.ResponseWriter, sess *sessions.Session) error {
+	return errors.New("store save error")
+}
+
+func TestAuthHandler_Logout_StoreError(t *testing.T) {
+	h := NewAuthHandler(&stubUserRepo{}, &stubFailStore{})
+	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	rr := httptest.NewRecorder()
+	h.Logout(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
 	}
 }
 

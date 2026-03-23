@@ -265,6 +265,20 @@ func TestFavoriteHandler_Index(t *testing.T) {
 			t.Errorf("got %d, want 200", rr.Code)
 		}
 	})
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubFavService{
+			getByUserFunc: func(_ int64) ([]model.FavoriteProgram, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		h := NewFavoriteHandler(svc, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
 }
 
 func TestParseInt(t *testing.T) {

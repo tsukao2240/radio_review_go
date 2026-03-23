@@ -503,3 +503,123 @@ func TestPostHandler_GetComments_ServiceError(t *testing.T) {
 		t.Errorf("got %d, want 500", rr.Code)
 	}
 }
+
+func TestPostHandler_UnlikePost_Unauthorized(t *testing.T) {
+	h := newPostHandler()
+	req := httptest.NewRequest(http.MethodPost, "/api/posts/unlike", nil)
+	rr := httptest.NewRecorder()
+	h.UnlikePost(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("got %d, want 401", rr.Code)
+	}
+}
+
+func TestPostHandler_UnlikePost_BadJSON(t *testing.T) {
+	h := newPostHandler()
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/unlike", strings.NewReader("bad")), 1)
+	rr := httptest.NewRecorder()
+	h.UnlikePost(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestPostHandler_AddComment_BadJSON(t *testing.T) {
+	h := newPostHandler()
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/comment", strings.NewReader("bad")), 1)
+	rr := httptest.NewRecorder()
+	h.AddComment(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestPostHandler_AddComment_ServiceError(t *testing.T) {
+	svc := &stubInteractionService{
+		addCommentFunc: func(_, _ int64, _ string) (*model.PostComment, error) {
+			return nil, errors.New("db error")
+		},
+	}
+	h := NewPostHandler(&stubPostService{}, svc, nil)
+	body, _ := json.Marshal(map[string]interface{}{"post_id": 1, "body": "test"})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/comment", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.AddComment(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestPostHandler_GetProgramRating_InvalidID(t *testing.T) {
+	h := newPostHandler()
+	r := chi.NewRouter()
+	r.Get("/program/{program_id}/rating", h.GetProgramRating)
+	req := httptest.NewRequest(http.MethodGet, "/program/abc/rating", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestPostHandler_GetProgramRating_ServiceError(t *testing.T) {
+	svc := &stubPostService{
+		getAvgRatingFunc: func(_ int64) (float64, error) {
+			return 0, errors.New("db error")
+		},
+	}
+	h := NewPostHandler(svc, &stubInteractionService{}, nil)
+	r := chi.NewRouter()
+	r.Get("/program/{program_id}/rating", h.GetProgramRating)
+	req := httptest.NewRequest(http.MethodGet, "/program/1/rating", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestPostHandler_CheckLike_InvalidID(t *testing.T) {
+	h := newPostHandler()
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/api/posts/check-like?post_id=bad", nil), 1)
+	rr := httptest.NewRecorder()
+	h.CheckLike(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestPostHandler_CheckLike_ServiceError(t *testing.T) {
+	svc := &stubInteractionService{
+		isLikedByFunc: func(_, _ int64) (bool, error) {
+			return false, errors.New("db error")
+		},
+	}
+	h := NewPostHandler(&stubPostService{}, svc, nil)
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/api/posts/check-like?post_id=1", nil), 1)
+	rr := httptest.NewRecorder()
+	h.CheckLike(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestPostHandler_LikePost_BadJSON(t *testing.T) {
+	h := newPostHandler()
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/like", strings.NewReader("bad")), 1)
+	rr := httptest.NewRecorder()
+	h.LikePost(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestPostHandler_DeleteComment_BadJSON(t *testing.T) {
+	h := newPostHandler()
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/comment/delete", strings.NewReader("bad")), 1)
+	rr := httptest.NewRecorder()
+	h.DeleteComment(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}

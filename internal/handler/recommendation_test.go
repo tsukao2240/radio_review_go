@@ -166,4 +166,37 @@ func TestRecommendationHandler_Index(t *testing.T) {
 			t.Errorf("got %d, want 200", rr.Code)
 		}
 	})
+
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubRecommendService{
+			getRecommendationsFunc: func(_ int64) ([]map[string]interface{}, error) {
+				return nil, errors.New("service error")
+			},
+		}
+		h := NewRecommendationHandler(svc, store)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/recommendations", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
+
+	t.Run("TrendingError: 200 (空でフォールバック)", func(t *testing.T) {
+		svc := &stubRecommendService{
+			getRecommendationsFunc: func(_ int64) ([]map[string]interface{}, error) {
+				return []map[string]interface{}{}, nil
+			},
+			getTrendingFunc: func(_, _ int) ([]map[string]interface{}, error) {
+				return nil, errors.New("trending error")
+			},
+		}
+		h := NewRecommendationHandler(svc, store)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/recommendations", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
 }

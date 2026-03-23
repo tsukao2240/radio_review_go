@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,19 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
+
+// radikoRoundTrip は http.DefaultTransport を差し替えるテスト用ヘルパー
+type radikoRoundTrip func(*http.Request) (*http.Response, error)
+
+func (f radikoRoundTrip) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// setDefaultTransport はテスト終了時に元の Transport を復元する
+func setDefaultTransport(t *testing.T, rt http.RoundTripper) {
+	t.Helper()
+	orig := http.DefaultTransport
+	http.DefaultTransport = rt
+	t.Cleanup(func() { http.DefaultTransport = orig })
+}
 
 func TestInsertColon(t *testing.T) {
 	cases := []struct {
@@ -332,4 +346,225 @@ func TestRadikoApiService_GetProgramDetails_CacheHit(t *testing.T) {
 	if result["title"] != "jazz show" {
 		t.Errorf("expected title='jazz show', got %v", result["title"])
 	}
+}
+
+// validRadikoXML は未来日付のテスト用 Radiko XML
+const validRadikoXML = `<?xml version="1.0" encoding="UTF-8"?>
+<radiko>
+  <stations>
+    <station id="TBS">
+      <name>TBSラジオ</name>
+      <progs>
+        <prog ft="29991231130000" to="29991231140000" ftl="1300" tol="1400">
+          <title>test show</title>
+          <pfm>test cast</pfm>
+          <url>https://radiko.jp/test</url>
+        </prog>
+      </progs>
+    </station>
+  </stations>
+</radiko>`
+
+func newXMLTestServer(xmlBody string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(xmlBody))
+	}))
+}
+
+func TestRadikoApiService_GetWeeklySchedule_FetchError(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	}))
+
+	_, err = svc.GetWeeklySchedule("TBS")
+	if err == nil {
+		t.Error("expected error from GetWeeklySchedule when fetchXML fails")
+	}
+}
+
+func TestRadikoApiService_GetWeeklySchedule_Success(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	srv := newXMLTestServer(validRadikoXML)
+	defer srv.Close()
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		r, _ := http.NewRequest("GET", srv.URL, nil)
+		return srv.Client().Do(r)
+	}))
+
+	result, err := svc.GetWeeklySchedule("TBS")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestRadikoApiService_GetTwoWeekSchedule_Success(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	// 週間XMLと日付別XMLの両方に対して同じ有効なXMLを返す
+	// 週間: ft="29991231..." → startDate より後 → entries に追加
+	// 日付別: ft が同じ → 重複としてスキップ
+	srv := newXMLTestServer(validRadikoXML)
+	defer srv.Close()
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		r, _ := http.NewRequest("GET", srv.URL, nil)
+		return srv.Client().Do(r)
+	}))
+
+	result, err := svc.GetTwoWeekSchedule("TBS")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestRadikoApiService_GetTwoWeekSchedule_FetchError(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	}))
+
+	_, err = svc.GetTwoWeekSchedule("TBS")
+	if err == nil {
+		t.Error("expected error from GetTwoWeekSchedule when fetchXML fails")
+	}
+}
+
+func TestRadikoApiService_GetCurrentPrograms_WithTransport(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	srv := newXMLTestServer(validRadikoXML)
+	defer srv.Close()
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		r, _ := http.NewRequest("GET", srv.URL, nil)
+		return srv.Client().Do(r)
+	}))
+
+	result, err := svc.GetCurrentPrograms()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 47 JP areas × 1 station = up to 47, but deduped by station name
+	if len(result) == 0 {
+		t.Error("expected at least 1 program")
+	}
+}
+
+func TestRadikoApiService_GetProgramDetails_FetchError(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	}))
+
+	_, err = svc.GetProgramDetails("TBS", "jazz show")
+	if err == nil {
+		t.Error("expected error from GetProgramDetails when fetchXML fails")
+	}
+}
+
+func TestRadikoApiService_GetProgramDetails_Success(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	svc := NewRadikoApiService(rdb, nil)
+
+	srv := newXMLTestServer(validRadikoXML)
+	defer srv.Close()
+
+	setDefaultTransport(t, radikoRoundTrip(func(req *http.Request) (*http.Response, error) {
+		r, _ := http.NewRequest("GET", srv.URL, nil)
+		return srv.Client().Do(r)
+	}))
+
+	result, err := svc.GetProgramDetails("TBS", "test show")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Error("expected non-nil result for matching title")
+	}
+}
+
+func TestCacheSetRadiko_MarshalError(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	// channels cannot be marshaled → marshal error path
+	cacheSetRadiko(context.Background(), rdb, "key", make(chan int), time.Minute)
+	// Should not panic; key should not be set
+}
+
+func TestCacheSetRadiko_RedisError(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	mr.Close() // close to trigger redis error
+
+	// Should not panic
+	cacheSetRadiko(context.Background(), rdb, "key", map[string]string{"x": "y"}, time.Minute)
 }
