@@ -259,3 +259,42 @@ func TestNotificationHandler_MarkAllAsRead_ServiceError(t *testing.T) {
 		t.Errorf("got %d, want 500", rr.Code)
 	}
 }
+
+func TestNotificationHandler_GetAll_ServiceError(t *testing.T) {
+	svc := &stubNotifService{
+		getAllFunc: func(_ int64) ([]model.Notification, error) {
+			return nil, errors.New("db error")
+		},
+	}
+	h := NewNotificationHandler(svc, nil)
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/api/notifications/all", nil), 1)
+	rr := httptest.NewRecorder()
+	h.GetAll(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestNotificationHandler_MarkAsRead_BadJSON(t *testing.T) {
+	h := NewNotificationHandler(&stubNotifService{}, nil)
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/notifications/mark-read", bytes.NewReader([]byte("bad"))), 1)
+	rr := httptest.NewRecorder()
+	h.MarkAsRead(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestNotificationHandler_MarkAsRead_ServiceError(t *testing.T) {
+	svc := &stubNotifService{
+		markAsReadFunc: func(_, _ int64) error { return errors.New("db error") },
+	}
+	h := NewNotificationHandler(svc, nil)
+	body, _ := json.Marshal(map[string]int64{"notification_id": 5})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/notifications/mark-read", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.MarkAsRead(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}

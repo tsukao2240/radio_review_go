@@ -207,3 +207,50 @@ func TestScheduleHandler_Cancel(t *testing.T) {
 		}
 	})
 }
+
+func TestScheduleHandler_Cancel_Forbidden(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test"))
+	svc := &stubScheduleService{
+		cancelFunc: func(_, _ int64) error {
+			return errors.New("この録音予約をキャンセルする権限がありません")
+		},
+	}
+	h := NewScheduleHandler(svc, store)
+	body, _ := json.Marshal(map[string]int64{"schedule_id": 99})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/schedule/cancel", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.Cancel(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("got %d, want 403", rr.Code)
+	}
+}
+
+func TestScheduleHandler_Cancel_DefaultError(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test"))
+	svc := &stubScheduleService{
+		cancelFunc: func(_, _ int64) error {
+			return errors.New("unexpected error")
+		},
+	}
+	h := NewScheduleHandler(svc, store)
+	body, _ := json.Marshal(map[string]int64{"schedule_id": 99})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/schedule/cancel", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.Cancel(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestScheduleHandler_Cancel_FormEncoded(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test"))
+	h := NewScheduleHandler(&stubScheduleService{}, store)
+	form := url.Values{"schedule_id": {"5"}}
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/schedule/cancel", strings.NewReader(form.Encode())), 1)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	h.Cancel(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}

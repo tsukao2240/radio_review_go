@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/sessions"
+	"golang.org/x/crypto/bcrypt"
 	"github.com/yourname/radio_review_go/internal/model"
 	"github.com/yourname/radio_review_go/internal/repository"
 )
@@ -242,5 +243,31 @@ func TestAuthHandler_ShowRegister(t *testing.T) {
 	h.ShowRegister(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestAuthHandler_Login_Success(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test-secret"))
+	// Generate a real bcrypt hash for "password123"
+	hash, err := bcrypt.GenerateFromPassword([]byte("password123"), 4) // cost=4 for speed
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	userRepo := &stubUserRepo{
+		findByEmailFunc: func(email string) (*model.User, error) {
+			return &model.User{ID: 42, Email: email, Password: string(hash)}, nil
+		},
+	}
+	h := NewAuthHandler(userRepo, store)
+	form := url.Values{"email": {"user@example.com"}, "password": {"password123"}}
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	h.Login(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Errorf("got %d, want 302", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); loc != "/" {
+		t.Errorf("got Location=%q, want /", loc)
 	}
 }

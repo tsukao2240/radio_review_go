@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gorilla/sessions"
@@ -87,7 +88,17 @@ func TestStartTimefreeRecording_MissingFields(t *testing.T) {
 
 func TestStartTimefreeRecording_Success(t *testing.T) {
 	_, rdb := newMiniRedis(t)
-	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	// Use os.MkdirTemp instead of t.TempDir() to avoid race with the background goroutine.
+	dir, err := os.MkdirTemp("", "test-recording-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		// Give the background goroutine a moment to finish before cleanup.
+		time.Sleep(50 * time.Millisecond)
+		os.RemoveAll(dir)
+	})
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
 	store := sessions.NewCookieStore([]byte("test"))
 
 	body, _ := json.Marshal(map[string]string{
@@ -482,5 +493,57 @@ func TestShowHistory(t *testing.T) {
 	h.ShowHistory(store)(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestDeleteRecording_NotFound(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	body, _ := json.Marshal(map[string]string{"recording_id": "nonexistent"})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/delete", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.DeleteRecording(store)(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("got %d, want 404", rr.Code)
+	}
+}
+
+func TestDeleteRecording_Forbidden(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "del_forbid",
+		OwnerKey:    "user_2",
+		Status:      "completed",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_del_forbid", string(data), 0)
+
+	body, _ := json.Marshal(map[string]string{"recording_id": "del_forbid"})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/delete", bytes.NewReader(body)), 1) // user_1
+	rr := httptest.NewRecorder()
+	h.DeleteRecording(store)(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("got %d, want 403", rr.Code)
+	}
+}
+
+func TestDeleteRecording_BadJSON(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	req := httptest.NewRequest(http.MethodPost, "/recording/delete", bytes.NewReader([]byte("bad-json")))
+	rr := httptest.NewRecorder()
+	h.DeleteRecording(store)(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400", rr.Code)
 	}
 }
