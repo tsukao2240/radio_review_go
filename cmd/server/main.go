@@ -68,6 +68,7 @@ func main() {
 	likeRepo := repository.NewPostLikeRepository(db)
 	commentRepo := repository.NewPostCommentRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
+	passwordResetRepo := repository.NewPasswordResetRepository(db)
 
 	// --- Services ---
 	radikoSvc := service.NewRadikoApiService(rdb, programRepo)
@@ -78,6 +79,7 @@ func main() {
 	notifSvc := service.NewNotificationService(notifRepo)
 	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
 	recommendSvc := service.NewRecommendationService(postRepo, programRepo, favRepo, rdb)
+	passwordResetSvc := service.NewPasswordResetService(passwordResetRepo, userRepo)
 
 	// --- Radiko client ---
 	keyPath := "storage/keys/radiko_auth_key.txt"
@@ -106,6 +108,7 @@ func main() {
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
 	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
+	passwordResetHandler := handler.NewPasswordResetHandler(passwordResetSvc)
 
 	// --- ユーザー解決関数の登録 (RenderWithBase でナビに使用) ---
 	handler.ResolveUser = func(r *http.Request) *model.User {
@@ -164,6 +167,12 @@ func main() {
 	r.Post("/logout", authHandler.Logout)
 	r.Get("/register", authHandler.ShowRegister)
 	r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/register", authHandler.Register)
+
+	// パスワードリセット（レートリミット: 5回/分）
+	r.Get("/password/reset", passwordResetHandler.ShowRequestForm)
+	r.With(appmiddleware.RateLimit(5, time.Minute)).Post("/password/email", passwordResetHandler.SendResetLink)
+	r.Get("/password/reset/{token}", passwordResetHandler.ShowResetForm)
+	r.With(appmiddleware.RateLimit(5, time.Minute)).Post("/password/update", passwordResetHandler.Reset)
 
 	// トップ
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {

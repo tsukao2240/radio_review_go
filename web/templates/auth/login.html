@@ -12,6 +12,9 @@
                     {{ if .Flash }}
                     <div class="alert alert-danger">{{ .Flash }}</div>
                     {{ end }}
+                    {{ with .Data }}{{ if index . "ResetSuccess" }}
+                    <div class="alert alert-success">パスワードをリセットしました。新しいパスワードでログインしてください。</div>
+                    {{ end }}{{ end }}
                     <form method="POST" action="/login">
                         <input type="hidden" name="_csrf" value="{{ .CSRFToken }}">
 
@@ -32,6 +35,7 @@
                         <div class="form-group row mb-0">
                             <div class="col-md-8 offset-md-4">
                                 <button type="submit" class="btn btn-primary">ログイン</button>
+                                <a href="/password/reset" class="btn btn-link">パスワードをお忘れですか？</a>
                             </div>
                         </div>
                     </form>

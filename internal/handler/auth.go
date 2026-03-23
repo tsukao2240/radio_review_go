@@ -28,7 +28,11 @@ func NewAuthHandler(userRepo repository.UserRepositoryInterface, store sessions.
 // ShowLogin は GET /login を処理する。
 // ログインフォームの HTML テンプレートを返す。
 func (h *AuthHandler) ShowLogin(w http.ResponseWriter, r *http.Request) {
-	RenderWithBase(w, r, "web/templates/auth/login.html", nil)
+	var data map[string]interface{}
+	if r.URL.Query().Get("reset") == "1" {
+		data = map[string]interface{}{"ResetSuccess": true}
+	}
+	RenderWithBase(w, r, "web/templates/auth/login.html", data)
 }
 
 // Login は POST /login を処理する。

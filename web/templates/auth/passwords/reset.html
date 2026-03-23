@@ -1,0 +1,56 @@
+{{ template "base" . }}
+
+{{ define "content" }}
+<title>新しいパスワードの設定</title>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">新しいパスワードの設定</div>
+                <div class="card-body">
+                    {{ with .Data }}
+                    {{ if index . "Error" }}
+                    <div class="alert alert-danger">{{ index . "Error" }}</div>
+                    {{ end }}
+
+                    <form method="POST" action="/password/update">
+                        <input type="hidden" name="token" value="{{ index . "Token" }}">
+                        <input type="hidden" name="email" value="{{ index . "Email" }}">
+
+                        <div class="mb-3">
+                            <label class="form-label">メールアドレス</label>
+                            <input type="email" class="form-control" value="{{ index . "Email" }}" readonly disabled>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">新しいパスワード</label>
+                            <input type="password" id="password" name="password"
+                                   class="form-control" required autofocus
+                                   minlength="8" placeholder="8文字以上">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password_confirmation" class="form-label">新しいパスワード（確認）</label>
+                            <input type="password" id="password_confirmation" name="password_confirmation"
+                                   class="form-control" required
+                                   minlength="8" placeholder="もう一度入力">
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                パスワードを更新する
+                            </button>
+                        </div>
+                    </form>
+                    {{ end }}
+
+                    <div class="mt-3 text-center">
+                        <a href="/login">ログインに戻る</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

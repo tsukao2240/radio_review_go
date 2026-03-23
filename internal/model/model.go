@@ -2,6 +2,13 @@ package model
 
 import "time"
 
+// PasswordReset - password_resets テーブル
+type PasswordReset struct {
+	Email     string    `db:"email"`
+	Token     string    `db:"token"`
+	CreatedAt time.Time `db:"created_at"`
+}
+
 // User - users テーブル
 type User struct {
 	ID              int64      `db:"id"`

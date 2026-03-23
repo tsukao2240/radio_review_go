@@ -90,3 +90,13 @@ type NotificationRepositoryInterface interface {
 	MarkAsRead(id, userID int64) error
 	MarkAllAsRead(userID int64) error
 }
+
+// PasswordResetRepositoryInterface
+type PasswordResetRepositoryInterface interface {
+	// Save はトークンを保存する（既存レコードは上書き）。
+	Save(email, token string) error
+	// FindByEmail は最新のトークンレコードを返す。
+	FindByEmail(email string) (*model.PasswordReset, error)
+	// Delete は指定メールアドレスのトークンを削除する。
+	Delete(email string) error
+}
