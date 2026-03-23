@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -168,6 +171,50 @@ func TestAuthHandler_Register(t *testing.T) {
 			t.Errorf("got Location=%q, want /", loc)
 		}
 	})
+}
+
+func TestAuthHandler_Register_CreateError(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test-secret"))
+	userRepo := &stubUserRepo{
+		createFunc: func(user *model.User) (int64, error) {
+			return 0, errors.New("db error")
+		},
+	}
+	h := NewAuthHandler(userRepo, store)
+	form := url.Values{
+		"name":                  {"Alice"},
+		"email":                 {"alice@example.com"},
+		"password":              {"pass1234"},
+		"password_confirmation": {"pass1234"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	h.Register(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestAuthHandler_Register_JSONBody(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test-secret"))
+	userRepo := &stubUserRepo{
+		createFunc: func(user *model.User) (int64, error) { return 2, nil },
+	}
+	h := NewAuthHandler(userRepo, store)
+	body, _ := json.Marshal(map[string]string{
+		"name":                  "Bob",
+		"email":                 "bob@example.com",
+		"password":              "secret123",
+		"password_confirmation": "secret123",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.Register(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Errorf("got %d, want 302", rr.Code)
+	}
 }
 
 func TestAuthHandler_Logout(t *testing.T) {

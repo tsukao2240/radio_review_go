@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gorilla/sessions"
@@ -86,6 +88,24 @@ func TestGetAndClearFlash_NilStore(t *testing.T) {
 	msg := getAndClearFlash(req, rr)
 	if msg != "" {
 		t.Errorf("expected empty for nil store, got %q", msg)
+	}
+}
+
+func TestRenderWithBase_ParseFilesError(t *testing.T) {
+	// Create a temp file that exists but base template doesn't → ParseFiles fails
+	dir := t.TempDir()
+	tmplPath := filepath.Join(dir, "page.html")
+	if err := os.WriteFile(tmplPath, []byte(`{{define "content"}}test{{end}}`), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	RenderWithBase(rr, req, tmplPath, nil)
+
+	// ParseFiles fails because baseTmpl ("web/templates/layouts/base.html") doesn't exist
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
 	}
 }
 

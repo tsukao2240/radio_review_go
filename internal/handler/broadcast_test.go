@@ -355,3 +355,14 @@ func TestRespondJSON(t *testing.T) {
 		t.Errorf("expected 'value' in body, got %q", rr.Body.String())
 	}
 }
+
+func TestRespondJSON_EncodeError(t *testing.T) {
+	rr := httptest.NewRecorder()
+	// channels cannot be JSON encoded → triggers the error log path
+	respondJSON(rr, make(chan int))
+	// Should not panic; Content-Type is still set
+	ct := rr.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected application/json, got %q", ct)
+	}
+}

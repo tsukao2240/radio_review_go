@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/yourname/radio_review_go/internal/middleware"
@@ -135,6 +136,43 @@ func TestFavoriteHandler_Destroy(t *testing.T) {
 			t.Errorf("got %d, want 422", rr.Code)
 		}
 	})
+
+	t.Run("未認証: 401", func(t *testing.T) {
+		h := NewFavoriteHandler(&stubFavService{}, nil)
+		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
+		req := httptest.NewRequest(http.MethodPost, "/favorites/delete", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+		h.Destroy(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("got %d, want 401", rr.Code)
+		}
+	})
+
+	t.Run("不正なJSON: 400", func(t *testing.T) {
+		h := NewFavoriteHandler(&stubFavService{}, nil)
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/delete", strings.NewReader("bad-json")), 1)
+		rr := httptest.NewRecorder()
+		h.Destroy(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("got %d, want 400", rr.Code)
+		}
+	})
+
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubFavService{
+			removeFunc: func(_ int64, _, _ string, _ *int) error {
+				return errors.New("db error")
+			},
+		}
+		h := NewFavoriteHandler(svc, nil)
+		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/delete", bytes.NewReader(body)), 1)
+		rr := httptest.NewRecorder()
+		h.Destroy(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
 }
 
 func TestFavoriteHandler_Check(t *testing.T) {
@@ -166,6 +204,21 @@ func TestFavoriteHandler_Check(t *testing.T) {
 		h.Check(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("got %d, want 400", rr.Code)
+		}
+	})
+
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubFavService{
+			checkFunc: func(_ int64, _, _ string, _ *int) (bool, error) {
+				return false, errors.New("db error")
+			},
+		}
+		h := NewFavoriteHandler(svc, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites/check?station_id=TBS&program_title=jazz", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Check(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
 		}
 	})
 
