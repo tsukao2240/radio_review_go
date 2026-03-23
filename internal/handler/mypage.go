@@ -139,6 +139,7 @@ func (h *MypageHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	SetFlash(r, w, "レビューを更新しました")
 	http.Redirect(w, r, "/my", http.StatusFound)
 }
 
@@ -179,5 +180,6 @@ func (h *MypageHandler) Destroy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	SetFlash(r, w, "レビューを削除しました")
 	http.Redirect(w, r, "/my", http.StatusFound)
 }

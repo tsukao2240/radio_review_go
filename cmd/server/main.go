@@ -110,6 +110,9 @@ func main() {
 	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
 	passwordResetHandler := handler.NewPasswordResetHandler(passwordResetSvc)
 
+	// --- フラッシュメッセージストアの登録 ---
+	handler.FlashStore = store
+
 	// --- ユーザー解決関数の登録 (RenderWithBase でナビに使用) ---
 	handler.ResolveUser = func(r *http.Request) *model.User {
 		session, err := store.Get(r, "radio_review_session")
