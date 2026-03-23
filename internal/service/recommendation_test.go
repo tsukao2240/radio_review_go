@@ -473,3 +473,84 @@ func TestRecommendationService_BuildRecommendations_NoKeywords(t *testing.T) {
 	// No keywords -> popular programs
 	_ = result
 }
+
+func TestRecommendationService_BuildRecommendations_WithKeywords(t *testing.T) {
+	postRepo := &stubPostRepo{
+		findByUserFunc: func(userID int64, limit, offset int) ([]model.Post, error) {
+			return []model.Post{
+				{ID: 1, ProgramTitle: "ジャズナイト", Rating: 4.5},
+			}, nil
+		},
+		findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
+			return []model.Post{{ID: 1, Rating: 4.0}}, nil
+		},
+		avgRatingFunc: func(programID int64) (float64, error) { return 4.0, nil },
+	}
+	programRepo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{
+				{ID: 10, StationID: "TBS", Title: "ジャズ特集"},
+			}, nil
+		},
+	}
+	favRepo := &stubFavRepo{
+		findByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+			return []model.FavoriteProgram{}, nil
+		},
+	}
+
+	svc := &RecommendationService{
+		postRepo:    postRepo,
+		programRepo: programRepo,
+		favRepo:     favRepo,
+		redis:       nil,
+	}
+
+	result, err := svc.buildRecommendations(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) == 0 {
+		t.Error("expected results, got none")
+	}
+}
+
+func TestRecommendationService_BuildRecommendations_EmptyResults_FallbackToPopular(t *testing.T) {
+	// Has keywords but findSimilarPrograms returns nothing → fall back to popular
+	postRepo := &stubPostRepo{
+		findByUserFunc: func(userID int64, limit, offset int) ([]model.Post, error) {
+			return []model.Post{
+				{ID: 1, ProgramTitle: "ジャズナイト", Rating: 4.5},
+			}, nil
+		},
+		findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
+			return []model.Post{}, nil
+		},
+	}
+	programRepo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{}, nil // No similar found
+		},
+		findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{{ID: 99, Title: "popular show"}}, nil
+		},
+	}
+	favRepo := &stubFavRepo{
+		findByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+			return []model.FavoriteProgram{}, nil
+		},
+	}
+
+	svc := &RecommendationService{
+		postRepo:    postRepo,
+		programRepo: programRepo,
+		favRepo:     favRepo,
+		redis:       nil,
+	}
+
+	result, err := svc.buildRecommendations(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = result
+}

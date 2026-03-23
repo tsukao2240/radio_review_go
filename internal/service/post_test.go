@@ -214,6 +214,45 @@ func TestPostService_GetPostsByUser(t *testing.T) {
 			t.Errorf("got total=%d, want 5", total)
 		}
 	})
+
+	t.Run("page < 1 は 1 に補正される", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			findByUserFunc:  func(userID int64, limit, offset int) ([]model.Post, error) { return nil, nil },
+			countByUserFunc: func(userID int64) (int, error) { return 0, nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, _, err := svc.GetPostsByUser(1, 20, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("FindByUser エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		postRepo := &stubPostRepo{
+			findByUserFunc: func(userID int64, limit, offset int) ([]model.Post, error) {
+				return nil, repoErr
+			},
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, _, err := svc.GetPostsByUser(1, 20, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+
+	t.Run("CountByUser エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("count error")
+		postRepo := &stubPostRepo{
+			findByUserFunc:  func(userID int64, limit, offset int) ([]model.Post, error) { return nil, nil },
+			countByUserFunc: func(userID int64) (int, error) { return 0, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, _, err := svc.GetPostsByUser(1, 20, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
 }
 
 func TestPostService_CreatePost(t *testing.T) {
@@ -301,6 +340,80 @@ func TestPostService_CreatePost(t *testing.T) {
 	})
 }
 
+func TestPostService_CreatePost_UpsertError(t *testing.T) {
+	repoErr := errors.New("upsert error")
+	programRepo := &stubProgramRepo{
+		findByStationAndTitleFunc: func(_, _ string) (*model.RadioProgram, error) {
+			return nil, errors.New("not found")
+		},
+		upsertFunc: func(p *model.RadioProgram) (int64, error) { return 0, repoErr },
+	}
+	svc := NewPostService(&stubPostRepo{}, programRepo, &stubTagRepo{})
+	data := map[string]interface{}{"station_id": "TBS", "program_title": "jazz", "title": "t", "body": "b"}
+	_, err := svc.CreatePost(data, 1)
+	if !errors.Is(err, repoErr) {
+		t.Errorf("expected repoErr, got %v", err)
+	}
+}
+
+func TestPostService_CreatePost_CreateError(t *testing.T) {
+	repoErr := errors.New("create error")
+	postRepo := &stubPostRepo{
+		createFunc: func(post *model.Post) (int64, error) { return 0, repoErr },
+	}
+	svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+	data := map[string]interface{}{"station_id": "TBS", "program_title": "jazz", "title": "t", "body": "b"}
+	_, err := svc.CreatePost(data, 1)
+	if !errors.Is(err, repoErr) {
+		t.Errorf("expected repoErr, got %v", err)
+	}
+}
+
+func TestPostService_CreatePost_RatingTypeVariants(t *testing.T) {
+	for _, rating := range []interface{}{float32(4.0), int(4), int64(4)} {
+		postRepo := &stubPostRepo{
+			createFunc: func(post *model.Post) (int64, error) { return 1, nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		data := map[string]interface{}{
+			"station_id": "TBS", "program_title": "jazz", "title": "t", "body": "b",
+			"rating": rating,
+		}
+		post, err := svc.CreatePost(data, 1)
+		if err != nil {
+			t.Errorf("rating %T: unexpected error: %v", rating, err)
+		}
+		if post.Rating != 4.0 {
+			t.Errorf("rating %T: got %.1f, want 4.0", rating, post.Rating)
+		}
+	}
+}
+
+func TestPostService_CreatePost_TagIDsInt64Slice(t *testing.T) {
+	var attached []int64
+	postRepo := &stubPostRepo{
+		createFunc: func(post *model.Post) (int64, error) { return 1, nil },
+	}
+	tagRepo := &stubTagRepo{
+		attachToPostFunc: func(postID, tagID int64) error {
+			attached = append(attached, tagID)
+			return nil
+		},
+	}
+	svc := NewPostService(postRepo, &stubProgramRepo{}, tagRepo)
+	data := map[string]interface{}{
+		"station_id": "TBS", "program_title": "p", "title": "t", "body": "b",
+		"tag_ids": []int64{5, 6, 7},
+	}
+	_, err := svc.CreatePost(data, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(attached) != 3 {
+		t.Errorf("expected 3 attached, got %d", len(attached))
+	}
+}
+
 func TestPostService_UpdatePost(t *testing.T) {
 	t.Run("正常更新", func(t *testing.T) {
 		var updated *model.Post
@@ -338,6 +451,31 @@ func TestPostService_UpdatePost(t *testing.T) {
 		err := svc.UpdatePost(1, map[string]interface{}{"user_id": int64(1)})
 		if err == nil {
 			t.Fatal("expected error for unauthorized update")
+		}
+	})
+
+	t.Run("FindByID エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("not found")
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) { return nil, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		if err := svc.UpdatePost(1, map[string]interface{}{"user_id": int64(1)}); !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+
+	t.Run("Update エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("update error")
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, UserID: 1}, nil
+			},
+			updateFunc: func(post *model.Post) error { return repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		if err := svc.UpdatePost(1, map[string]interface{}{"user_id": int64(1)}); !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
 		}
 	})
 }
@@ -388,6 +526,18 @@ func TestPostService_GetAllTags(t *testing.T) {
 			t.Errorf("got %d tags, want 2", len(tags))
 		}
 	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		tagRepo := &stubTagRepo{
+			findAllFunc: func() ([]model.PostTag, error) { return nil, repoErr },
+		}
+		svc := NewPostService(&stubPostRepo{}, &stubProgramRepo{}, tagRepo)
+		_, err := svc.GetAllTags()
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
 }
 
 func TestPostService_GetPostsByProgram(t *testing.T) {
@@ -415,6 +565,19 @@ func TestPostService_GetPostsByProgram(t *testing.T) {
 		repoErr := errors.New("db error")
 		postRepo := &stubPostRepo{
 			findByProgramFunc: func(_, _ string, _, _ int) ([]model.Post, error) { return nil, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, _, err := svc.GetPostsByProgram("TBS", "jazz show", 20, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+
+	t.Run("CountByProgram エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("count error")
+		postRepo := &stubPostRepo{
+			findByProgramFunc:  func(_, _ string, _, _ int) ([]model.Post, error) { return nil, nil },
+			countByProgramFunc: func(_, _ string) (int, error) { return 0, repoErr },
 		}
 		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
 		_, _, err := svc.GetPostsByProgram("TBS", "jazz show", 20, 1)

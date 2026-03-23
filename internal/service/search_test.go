@@ -434,3 +434,134 @@ func TestSearchByCast_CacheMiss(t *testing.T) {
 		t.Errorf("expected 1 result, got %d", len(result))
 	}
 }
+
+func TestSearchByCast_WithStationFilter(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repo := &stubProgramRepo{
+		searchByCastFunc: func(cast string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{
+				{ID: 1, Title: "show A", StationID: "TBS"},
+				{ID: 2, Title: "show B", StationID: "QRR"},
+			}, nil
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	stationID := "TBS"
+	result, err := svc.SearchByCast("DJ Smith", &stationID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].StationID != "TBS" {
+		t.Errorf("expected 1 TBS result, got %v", result)
+	}
+}
+
+func TestSearchByCast_RepoError(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repoErr := errors.New("db error")
+	repo := &stubProgramRepo{
+		searchByCastFunc: func(cast string, limit, offset int) ([]model.RadioProgram, error) {
+			return nil, repoErr
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	_, err := svc.SearchByCast("DJ Smith", nil)
+	if !errors.Is(err, repoErr) {
+		t.Errorf("expected repoErr, got %v", err)
+	}
+}
+
+func TestSearchProgramsWithPosts_Basic(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{
+				{ID: 1, Title: "jazz show"},
+				{ID: 2, Title: "jazz night"},
+			}, nil
+		},
+		searchByCastFunc: func(cast string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{
+				{ID: 2, Title: "jazz night"}, // duplicate to test dedup
+				{ID: 3, Title: "another show"},
+			}, nil
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	result, total, err := svc.SearchProgramsWithPosts("jazz", 10, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("expected total=3 (dedup), got %d", total)
+	}
+	if len(result) != 3 {
+		t.Errorf("expected 3 results, got %d", len(result))
+	}
+}
+
+func TestSearchProgramsWithPosts_TitleError(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repoErr := errors.New("title search error")
+	repo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return nil, repoErr
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	_, _, err := svc.SearchProgramsWithPosts("jazz", 10, 1)
+	if !errors.Is(err, repoErr) {
+		t.Errorf("expected repoErr, got %v", err)
+	}
+}
+
+func TestSearchProgramsWithPosts_CastError(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repoErr := errors.New("cast search error")
+	repo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return nil, nil
+		},
+		searchByCastFunc: func(cast string, limit, offset int) ([]model.RadioProgram, error) {
+			return nil, repoErr
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	_, _, err := svc.SearchProgramsWithPosts("jazz", 10, 1)
+	if !errors.Is(err, repoErr) {
+		t.Errorf("expected repoErr, got %v", err)
+	}
+}
+
+func TestSearchProgramsWithPosts_PaginationPage2(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	programs := make([]model.RadioProgram, 15)
+	for i := range programs {
+		programs[i] = model.RadioProgram{ID: int64(i + 1), Title: "show"}
+	}
+	repo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return programs, nil
+		},
+		searchByCastFunc: func(cast string, limit, offset int) ([]model.RadioProgram, error) {
+			return nil, nil
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	result, total, err := svc.SearchProgramsWithPosts("show", 5, 2) // page 2
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 15 {
+		t.Errorf("expected total=15, got %d", total)
+	}
+	if len(result) != 5 {
+		t.Errorf("expected 5 results for page 2, got %d", len(result))
+	}
+}

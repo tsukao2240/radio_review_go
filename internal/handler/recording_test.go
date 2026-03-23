@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -275,6 +276,119 @@ func TestDownloadRecording_NotCompleted(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestDownloadRecording_NotFound(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/download?recording_id=nonexistent", nil), 1)
+	rr := httptest.NewRecorder()
+	h.DownloadRecording(store)(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("got %d, want 404", rr.Code)
+	}
+}
+
+func TestDownloadRecording_Forbidden(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "forbid123",
+		OwnerKey:    "user_2",
+		Status:      "completed",
+		FilePath:    "/tmp/file.aac",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_forbid123", string(data), 0)
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/download?recording_id=forbid123", nil), 1) // user_1
+	rr := httptest.NewRecorder()
+	h.DownloadRecording(store)(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("got %d, want 403", rr.Code)
+	}
+}
+
+func TestDownloadRecording_FileOpenError(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "filerr123",
+		OwnerKey:    "user_1",
+		Status:      "completed",
+		FilePath:    "/nonexistent/path/file.aac",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_filerr123", string(data), 0)
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/download?recording_id=filerr123", nil), 1)
+	rr := httptest.NewRecorder()
+	h.DownloadRecording(store)(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestDownloadRecording_Success(t *testing.T) {
+	dir := t.TempDir()
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+	store := sessions.NewCookieStore([]byte("test"))
+
+	// Create a real file to serve.
+	filePath := dir + "/test.aac"
+	if err := os.WriteFile(filePath, []byte("audio-data"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	info := &model.RecordingInfo{
+		RecordingID: "dl_ok",
+		OwnerKey:    "user_1",
+		Status:      "completed",
+		FilePath:    filePath,
+		ProgramName: "Jazz Show",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_dl_ok", string(data), 0)
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/download?recording_id=dl_ok", nil), 1)
+	rr := httptest.NewRecorder()
+	h.DownloadRecording(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestListRecordings_WithRecordings(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "list001",
+		OwnerKey:    "user_1",
+		Status:      "completed",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_list001", string(data), 0)
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/list", nil), 1)
+	rr := httptest.NewRecorder()
+	h.ListRecordings(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
 	}
 }
 
