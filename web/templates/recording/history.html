@@ -13,7 +13,8 @@
     {{ if $recordings }}
         <div class="recording-list">
             {{ range $recordings }}
-                <div class="recording-card">
+                <div class="recording-card"
+                     {{ if eq .Status "recording" }}data-recording-id="{{ .RecordingID }}" data-polling="true"{{ end }}>
                     <div class="recording-card-header">
                         <div class="recording-title">{{ .ProgramName }}</div>
                         <div>
@@ -78,6 +79,61 @@
 
 <script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
+    // 録音中カードのポーリング（10秒ごとにステータス確認）
+    var pollingCards = document.querySelectorAll('[data-polling="true"]');
+    if (pollingCards.length > 0) {
+        var timers = [];
+        pollingCards.forEach(function(card) {
+            var recordingId = card.dataset.recordingId;
+            if (!recordingId) return;
+
+            var timerId = setInterval(function() {
+                fetch('/recording/status?recording_id=' + encodeURIComponent(recordingId))
+                    .then(function(r) {
+                        if (!r.ok) {
+                            clearInterval(timerId);
+                            return null;
+                        }
+                        return r.json();
+                    })
+                    .then(function(data) {
+                        if (!data) return;
+                        if (data.status === 'recording') return; // まだ録音中
+
+                        // ステータスが変わった → UI を更新してポーリング停止
+                        clearInterval(timerId);
+                        var statusEl = card.querySelector('.recording-status');
+                        var actionEl = card.querySelector('.text-muted');
+
+                        if (data.status === 'completed') {
+                            if (statusEl) {
+                                statusEl.className = 'recording-status status-completed';
+                                statusEl.innerHTML = '<i class="fas fa-check-circle"></i> 完了';
+                            }
+                            if (actionEl) {
+                                actionEl.outerHTML =
+                                    '<div class="recording-actions">' +
+                                    '<a href="/recording/download?recording_id=' + encodeURIComponent(recordingId) + '" class="btn-download">' +
+                                    '<i class="fas fa-download"></i> ダウンロード</a>' +
+                                    '</div>';
+                            }
+                            if (window.toast) window.toast.success('録音が完了しました');
+                        } else {
+                            if (statusEl) {
+                                statusEl.className = 'recording-status status-failed';
+                                statusEl.textContent = data.status;
+                            }
+                            if (actionEl) actionEl.remove();
+                            if (window.toast) window.toast.error('録音に失敗しました');
+                        }
+                        card.removeAttribute('data-polling');
+                    })
+                    .catch(function() { clearInterval(timerId); });
+            }, 10000);
+            timers.push(timerId);
+        });
+    }
+
     document.querySelectorAll('.delete-recording-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             const recordingId = this.dataset.recordingId;
