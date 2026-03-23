@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -335,5 +336,22 @@ func TestBroadcastHandler_GetTwoWeekScheduleSelect(t *testing.T) {
 	// エラー時でも 200 OK（空の station list で表示）
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestRespondJSON(t *testing.T) {
+	rr := httptest.NewRecorder()
+	data := map[string]string{"key": "value"}
+	respondJSON(rr, data)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+	ct := rr.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected application/json, got %q", ct)
+	}
+	if !strings.Contains(rr.Body.String(), "value") {
+		t.Errorf("expected 'value' in body, got %q", rr.Body.String())
 	}
 }

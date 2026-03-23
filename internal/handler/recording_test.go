@@ -357,3 +357,16 @@ func TestOwnerKey_GuestSession(t *testing.T) {
 		t.Error("expected non-empty owner key for guest")
 	}
 }
+
+func TestShowHistory(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/history", nil), 1)
+	rr := httptest.NewRecorder()
+	h.ShowHistory(store)(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}

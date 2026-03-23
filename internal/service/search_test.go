@@ -1,9 +1,13 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/yourname/radio_review_go/internal/model"
 )
 
@@ -296,5 +300,137 @@ func TestSearchProgramsWithPosts_Pagination(t *testing.T) {
 	}
 	if len(result2) != 1 {
 		t.Errorf("expected 1 item on last page, got %d", len(result2))
+	}
+}
+
+func newSearchMiniRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
+}
+
+func TestNewRadioProgramSearchService(t *testing.T) {
+	svc := NewRadioProgramSearchService(nil, nil)
+	if svc == nil {
+		t.Error("expected non-nil service")
+	}
+}
+
+func TestSearchCacheGetSet(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	ctx := context.Background()
+
+	t.Run("存在しないキー: false", func(t *testing.T) {
+		var dest []model.RadioProgram
+		ok := searchCacheGet(ctx, rdb, "missing", &dest)
+		if ok {
+			t.Error("expected false for missing key")
+		}
+	})
+
+	t.Run("セット後に取得: true", func(t *testing.T) {
+		data := []model.RadioProgram{{ID: 1, Title: "jazz show"}}
+		searchCacheSet(ctx, rdb, "test_key", data, time.Minute)
+
+		var dest []model.RadioProgram
+		ok := searchCacheGet(ctx, rdb, "test_key", &dest)
+		if !ok {
+			t.Error("expected true after set")
+		}
+		if len(dest) != 1 || dest[0].Title != "jazz show" {
+			t.Errorf("unexpected result: %v", dest)
+		}
+	})
+
+	t.Run("不正なJSON: false", func(t *testing.T) {
+		rdb.Set(ctx, "bad_json", "not-json", time.Minute)
+		var dest []model.RadioProgram
+		ok := searchCacheGet(ctx, rdb, "bad_json", &dest)
+		if ok {
+			t.Error("expected false for invalid JSON")
+		}
+	})
+}
+
+func TestSearchByTitle_CacheHit(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repo := &stubProgramRepo{}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	cached := []model.RadioProgram{{ID: 1, Title: "jazz show"}, {ID: 2, Title: "jazz night"}}
+	cacheKey := "search_programs_" + keywordMD5("jazz")
+	searchCacheSet(context.Background(), rdb, cacheKey, cached, time.Minute)
+
+	result, err := svc.SearchByTitle("jazz", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("expected 2 results from cache, got %d", len(result))
+	}
+}
+
+func TestSearchByTitle_CacheMiss(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{{ID: 3, Title: "morning jazz", StationID: "TBS"}}, nil
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	result, err := svc.SearchByTitle("jazz", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result, got %d", len(result))
+	}
+}
+
+func TestSearchByTitle_StationFilter(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repo := &stubProgramRepo{
+		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{
+				{ID: 1, Title: "jazz show", StationID: "TBS"},
+				{ID: 2, Title: "jazz night", StationID: "QRR"},
+			}, nil
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	stationID := "TBS"
+	result, err := svc.SearchByTitle("jazz", &stationID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result after station filter, got %d", len(result))
+	}
+	if result[0].StationID != "TBS" {
+		t.Errorf("expected TBS, got %s", result[0].StationID)
+	}
+}
+
+func TestSearchByCast_CacheMiss(t *testing.T) {
+	rdb := newSearchMiniRedis(t)
+	repo := &stubProgramRepo{
+		searchByCastFunc: func(cast string, limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{{ID: 1, Title: "morning show", StationID: "TBS"}}, nil
+		},
+	}
+	svc := NewRadioProgramSearchService(repo, rdb)
+
+	result, err := svc.SearchByCast("DJ Smith", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 result, got %d", len(result))
 	}
 }

@@ -399,3 +399,77 @@ func TestRecommendationService_NewRecommendationService(t *testing.T) {
 		t.Error("expected non-nil service")
 	}
 }
+
+func TestRecommendationService_GetRecommendations_CacheMiss_NoHistory(t *testing.T) {
+	rdb := newTestMiniRedis(t)
+
+	// No cache, no user history (favs empty, posts empty) -> popular programs
+	postRepo := &stubPostRepo{
+		findByUserFunc: func(userID int64, limit, offset int) ([]model.Post, error) {
+			return []model.Post{}, nil
+		},
+	}
+	programRepo := &stubProgramRepo{
+		countAllFunc: func() (int, error) { return 0, nil },
+		findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{}, nil
+		},
+	}
+	favRepo := &stubFavRepo{
+		findByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+			return []model.FavoriteProgram{}, nil
+		},
+	}
+
+	svc := &RecommendationService{
+		postRepo:    postRepo,
+		programRepo: programRepo,
+		favRepo:     favRepo,
+		redis:       rdb,
+	}
+
+	result, err := svc.GetRecommendations(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Returns popular programs (empty list)
+	_ = result
+}
+
+func TestRecommendationService_BuildRecommendations_NoKeywords(t *testing.T) {
+	rdb := newTestMiniRedis(t)
+
+	postRepo := &stubPostRepo{
+		findByUserFunc: func(userID int64, limit, offset int) ([]model.Post, error) {
+			return []model.Post{}, nil
+		},
+	}
+	programRepo := &stubProgramRepo{
+		countAllFunc: func() (int, error) { return 2, nil },
+		findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
+			return []model.RadioProgram{
+				{ID: 1, Title: "jazz show"},
+				{ID: 2, Title: "morning talk"},
+			}, nil
+		},
+	}
+	favRepo := &stubFavRepo{
+		findByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+			return []model.FavoriteProgram{}, nil
+		},
+	}
+
+	svc := &RecommendationService{
+		postRepo:    postRepo,
+		programRepo: programRepo,
+		favRepo:     favRepo,
+		redis:       rdb,
+	}
+
+	result, err := svc.buildRecommendations(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// No keywords -> popular programs
+	_ = result
+}
