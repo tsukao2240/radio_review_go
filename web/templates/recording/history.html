@@ -70,13 +70,13 @@
     {{ end }}
 
     <div class="back-button">
-        <a href="/programs/schedule" class="btn btn-secondary">
+        <a href="/schedule" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> 放送中の番組に戻る
         </a>
     </div>
 </div>
 
-<script>
+<script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.delete-recording-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {

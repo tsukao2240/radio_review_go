@@ -11,7 +11,7 @@
 
 <div class="max-w-7xl mx-auto">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 space-y-4 md:space-y-0">
-        <a href="/recording/twoweek?area={{ $selectedArea }}"
+        <a href="/timefree?area={{ $selectedArea }}"
            class="touch-target inline-flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition w-fit">
             <i class="fas fa-arrow-left mr-2"></i>放送局選択に戻る
         </a>
@@ -52,7 +52,7 @@
             {{ if eq (index . "date") $date }}
             <div class="card-base">
                 <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                    <a href="/programs/detail?station_id={{ index . "station_id" }}&title={{ index . "title" }}&from=timefree"
+                    <a href="/list/{{ index . "station_id" }}/{{ index . "title" }}"
                        class="hover:underline hover:text-primary-600 transition">
                         {{ index . "title" }}
                     </a>

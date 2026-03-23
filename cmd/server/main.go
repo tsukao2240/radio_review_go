@@ -9,11 +9,12 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/gorilla/sessions"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
@@ -37,6 +38,9 @@ func main() {
 
 	// --- DB ---
 	db := mustConnectDB()
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	// --- Redis ---
 	rdb := mustConnectRedis()
@@ -138,26 +142,41 @@ func main() {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	// Vite ビルド成果物のフォントパス互換 (CSSが /build/assets/ を参照)
 	r.Handle("/build/assets/*", http.StripPrefix("/build/assets/", http.FileServer(http.Dir("web/static"))))
+	// PWA マニフェスト・Service Worker・ファビコン
+	r.Get("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/static/manifest.json")
+	})
+	r.Get("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Service-Worker-Allowed", "/")
+		http.ServeFile(w, r, "web/static/sw.js")
+	})
+	r.Get("/offline.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/static/offline.html")
+	})
+	r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r) // ファビコン未作成につき 404
+	})
 
-	// 認証
+	// 認証（ログインは10回/分のレートリミット）
 	r.Get("/login", authHandler.ShowLogin)
-	r.Post("/login", authHandler.Login)
+	r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/login", authHandler.Login)
 	r.Post("/logout", authHandler.Logout)
 	r.Get("/register", authHandler.ShowRegister)
-	r.Post("/register", authHandler.Register)
+	r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/register", authHandler.Register)
 
 	// トップ
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/schedule", http.StatusFound)
 	})
 
-	// 番組表・検索
+	// 番組表・検索（検索は30回/分のレートリミット）
 	r.Get("/schedule", broadcastHandler.GetCurrentSchedule)
 	r.Get("/schedule/{station_id}", broadcastHandler.GetWeeklySchedule)
 	r.Get("/timefree", broadcastHandler.GetTwoWeekScheduleSelect)
 	r.Get("/timefree/{station_id}", broadcastHandler.GetTwoWeekScheduleByStation)
 	r.Get("/list/{station_id}/{title}", broadcastHandler.ShowProgramDetail)
-	r.Get("/search", broadcastHandler.Search)
+	r.With(appmiddleware.RateLimit(30, time.Minute)).Get("/search", broadcastHandler.Search)
 
 	// レビュー（公開）
 	r.Get("/program", postHandler.IndexPrograms)

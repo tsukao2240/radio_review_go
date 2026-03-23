@@ -16,7 +16,7 @@
     <br>
     <h3 class="caption">{{ $programTitle }}</h3>
     <div>
-        <form method="POST" action="/posts/store/{{ $programID }}">
+        <form method="POST" action="/review/{{ $programID }}">
             <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
             <input type="hidden" name="program_id" value="{{ $programID }}">
             <input type="hidden" name="program_title" value="{{ $programTitle }}">

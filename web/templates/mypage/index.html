@@ -15,16 +15,16 @@
     {{ range $posts }}
     <div class="review-card">
         <div class="review-card-header">
-            <a href="/programs/detail?station_id={{ .StationID }}&title={{ .ProgramTitle }}&from=mypage">
+            <a href="/list/{{ .StationID }}/{{ .ProgramTitle }}">
                 {{ .ProgramTitle }}
             </a>
             <div class="review-actions">
-                <a href="/mypage/reviews/edit/{{ .ID }}" class="btn-edit">
+                <a href="/my/edit/{{ .ID }}" class="btn-edit">
                     <i class="fas fa-edit"></i> 編集
                 </a>
-                <form method="POST" action="/mypage/reviews/delete" style="display: inline;">
+                <form method="POST" action="/my" style="display: inline;">
                     <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
-                    <input type="hidden" name="id" value="{{ .ID }}">
+                    <input type="hidden" name="post_id" value="{{ .ID }}">
                     <button type="submit" class="btn-delete-review" onclick="return confirm('このレビューを削除しますか？')">
                         <i class="fas fa-trash"></i> 削除
                     </button>
@@ -49,7 +49,7 @@
 <div class="empty-state">
     <i class="far fa-edit"></i>
     <p>まだ投稿がありません</p>
-    <a href="/programs/schedule" class="btn btn-primary">
+    <a href="/schedule" class="btn btn-primary">
         <i class="fas fa-plus"></i> レビューを投稿する
     </a>
 </div>

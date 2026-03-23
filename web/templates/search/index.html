@@ -52,7 +52,7 @@
             {{ range $results }}
             <div class="card-base">
                 <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                    <a href="/programs/detail?station_id={{ .StationID }}&title={{ .Title }}&from=search&keyword={{ $keyword }}"
+                    <a href="/list/{{ .StationID }}/{{ .Title }}"
                        class="hover:underline hover:text-primary-600 transition">
                         {{ .Title }}
                     </a>

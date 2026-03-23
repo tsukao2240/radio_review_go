@@ -11,7 +11,7 @@
     <br>
     <h3 class="caption">レビューの編集</h3>
     <div>
-        <form method="POST" action="/mypage/reviews/update/{{ $post.ID }}">
+        <form method="POST" action="/my/edit/{{ $post.ID }}">
             <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
             <input type="hidden" name="id" value="{{ $post.ID }}">
             <input type="hidden" name="user_id" value="{{ $post.UserID }}">

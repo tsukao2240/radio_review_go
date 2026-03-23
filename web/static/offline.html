@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>オフライン - RadioProgram Review</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .offline-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .offline-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .retry-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            font-weight: bold;
+        }
+
+        .retry-button:hover {
+            transform: scale(1.05);
+        }
+
+        .retry-button:active {
+            transform: scale(0.98);
+        }
+
+        .tips {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #eee;
+        }
+
+        .tips h2 {
+            color: #667eea;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .tips ul {
+            list-style: none;
+            text-align: left;
+        }
+
+        .tips li {
+            padding: 8px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .tips li::before {
+            content: "✓ ";
+            color: #667eea;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">
+            📡
+        </div>
+        <h1>オフラインです</h1>
+        <p>
+            インターネット接続がありません。<br>
+            ネットワークに接続してから、もう一度お試しください。
+        </p>
+        <button class="retry-button" onclick="window.location.reload()">
+            再試行
+        </button>
+
+        <div class="tips">
+            <h2>確認してください</h2>
+            <ul>
+                <li>Wi-Fiまたはモバイルデータがオンになっているか</li>
+                <li>機内モードがオフになっているか</li>
+                <li>ルーターが正常に動作しているか</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // オンラインになったら自動的にリロード
+        window.addEventListener('online', () => {
+            window.location.reload();
+        });
+
+        // 定期的に接続をチェック
+        setInterval(() => {
+            if (navigator.onLine) {
+                window.location.reload();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

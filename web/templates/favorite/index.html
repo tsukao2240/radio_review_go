@@ -20,7 +20,7 @@
                 <div class="favorite-card">
                     <div class="favorite-card-header">
                         <div>
-                            <a href="/programs/detail?station_id={{ .StationID }}&title={{ .ProgramTitle }}&from=favorites" style="text-decoration: none; color: inherit;">
+                            <a href="/list/{{ .StationID }}/{{ .ProgramTitle }}" style="text-decoration: none; color: inherit;">
                                 <div class="favorite-title" style="cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#007bff'" onmouseout="this.style.color='inherit'">{{ .ProgramTitle }}</div>
                             </a>
                             {{ if .BroadcastDay }}
@@ -52,13 +52,13 @@
     {{ end }}
 
     <div class="back-button">
-        <a href="/programs/schedule" class="btn btn-secondary">
+        <a href="/schedule" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> 放送中の番組に戻る
         </a>
     </div>
 </div>
 
-<script>
+<script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
     // 曜日バッジの表示
     var days = ['月', '火', '水', '木', '金', '土', '日'];
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            fetch('/favorites/destroy', {
+            fetch('/favorites/delete', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

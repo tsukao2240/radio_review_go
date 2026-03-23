@@ -33,7 +33,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		}
 
 		csp := fmt.Sprintf(
-			"default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'",
+			"default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; worker-src 'self'",
 			nonce,
 		)
 

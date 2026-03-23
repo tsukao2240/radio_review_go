@@ -48,7 +48,7 @@ func (s *stubRadikoService) GetProgramDetails(stationID, title string) (map[stri
 
 // stubSearchService は RadioProgramSearchServiceInterface のスタブ実装。
 type stubSearchService struct {
-	searchForAPIFunc func(keyword, cast *string, stationID *string, limit int) ([]model.RadioProgram, error)
+	searchForAPIFunc    func(keyword, cast *string, stationID *string, limit int) ([]model.RadioProgram, error)
 	searchByTitleCalled bool
 	searchForAPICalled  bool
 	lastKeyword         *string

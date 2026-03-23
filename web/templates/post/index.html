@@ -12,7 +12,7 @@
     <h3 class="caption">番組一覧（{{ $total }}件）</h3>
 
     <div class="mb-3">
-        <form method="get" action="/posts" class="row g-3">
+        <form method="get" action="/program" class="row g-3">
             <div class="col-md-6">
                 <div class="input-group">
                     <input type="text" name="search" class="form-control" placeholder="番組名または出演者で検索" value="{{ index $ "Search" }}">
@@ -36,7 +36,7 @@
         {{ range $results }}
         <div class="card">
             <div class="card-header">
-                <a href="/programs/detail?station_id={{ .StationID }}&title={{ .Title }}">{{ .Title }}</a>
+                <a href="/list/{{ .StationID }}/{{ .Title }}">{{ .Title }}</a>
             </div>
             <div class="card-body">
                 <div class="program-cast">{{ .Cast }}</div>

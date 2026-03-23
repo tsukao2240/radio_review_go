@@ -9,7 +9,7 @@
 
 <!-- フィルターコントロール -->
 <div class="filter-controls">
-    <form method="GET" action="/posts/all" class="row g-3">
+    <form method="GET" action="/review/list" class="row g-3">
         <div class="col-md-3">
             <label for="min_rating" class="form-label">最低評価</label>
             <select name="min_rating" id="min_rating" class="form-select">
@@ -48,7 +48,7 @@
     <div class="card">
         {{ range $posts }}
         <div class="card-header">
-            <a href="/programs/detail?station_id={{ .StationID }}&title={{ .ProgramTitle }}&from=review">{{ .ProgramTitle }}</a>
+            <a href="/list/{{ .StationID }}/{{ .ProgramTitle }}">{{ .ProgramTitle }}</a>
         </div>
         <div class="card-body card_review_body">
             <dt>{{ .Title }}</dt>

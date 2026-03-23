@@ -226,11 +226,11 @@ func (h *BroadcastHandler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"Keyword":    keyword,
-		"Cast":       cast,
-		"StationID":  stationIDParam,
-		"Results":    nil,
-		"Total":      0,
+		"Keyword":   keyword,
+		"Cast":      cast,
+		"StationID": stationIDParam,
+		"Results":   nil,
+		"Total":     0,
 	}
 
 	// どちらのパラメータもない場合はフォームのみ表示

@@ -31,16 +31,13 @@
     <!-- PWA Icons -->
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" sizes="192x192" href="/images/icons/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192x192.png">
 
     <!-- Fonts -->
     <link rel="dns-prefetch" href="//fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet">
 
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-
-    <!-- App CSS (Viteビルド成果物) -->
+    <!-- App CSS (Viteビルド成果物 / Font Awesome 含む) -->
     <link rel="stylesheet" href="/static/app.css">
 </head>
 
@@ -73,10 +70,10 @@
                         <a href="/search" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-search mr-2"></i>番組検索
                         </a>
-                        <a href="/programs/schedule" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                        <a href="/schedule" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-broadcast-tower mr-2"></i>放送中
                         </a>
-                        <a href="/recording/twoweek" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                        <a href="/timefree" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-podcast mr-2"></i>録音
                         </a>
                         <a href="/recording/history" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
@@ -87,7 +84,7 @@
                         <a href="/favorites" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-heart mr-2"></i>お気に入り
                         </a>
-                        <a href="/posts" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                        <a href="/review/list" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-book-open mr-2"></i>レビュー
                         </a>
 
@@ -104,7 +101,7 @@
                                 <i class="fas fa-chevron-down ml-2"></i>
                             </button>
                             <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-2 invisible group-hover:visible transition-all">
-                                <a href="/mypage" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                <a href="/my" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                                     <i class="fas fa-user mr-2"></i>マイページ
                                 </a>
                                 <a href="/recording/schedules" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
@@ -120,7 +117,7 @@
                             </div>
                         </div>
                         {{ else }}
-                        <a href="/posts" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
+                        <a href="/review/list" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-book-open mr-2"></i>レビュー
                         </a>
                         <a href="/login" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
@@ -154,23 +151,23 @@
                     <a href="/search" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                         <i class="fas fa-search mr-3"></i>番組検索
                     </a>
-                    <a href="/programs/schedule" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                    <a href="/schedule" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                         <i class="fas fa-broadcast-tower mr-3"></i>放送中の番組
                     </a>
-                    <a href="/recording/twoweek" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                    <a href="/timefree" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                         <i class="fas fa-podcast mr-3"></i>タイムフリー録音
                     </a>
                     <a href="/recording/history" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                         <i class="fas fa-microphone mr-3"></i>録音履歴
                     </a>
-                    <a href="/posts" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                    <a href="/review/list" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                         <i class="fas fa-book-open mr-3"></i>レビューを見る
                     </a>
 
                     {{ if .User }}
                     <div class="border-t border-white/20 pt-4 mt-4">
                         <p class="text-white/70 text-sm px-4 mb-2">{{ .User.Name }}</p>
-                        <a href="/mypage" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <a href="/my" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-user mr-3"></i>マイページ
                         </a>
                         <a href="/recording/schedules" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
@@ -182,7 +179,7 @@
                         <a href="/notifications" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-bell mr-3"></i>通知
                         </a>
-                        <a href="/posts/create" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
+                        <a href="/program" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-pen-square mr-3"></i>レビューを投稿
                         </a>
                         <form method="POST" action="/logout">
@@ -234,7 +231,22 @@
     </div>
 
     <!-- App JS (Viteビルド成果物) -->
-    <script nonce="{{ .Nonce }}" src="/static/app.js"></script>
+    <script nonce="{{ .Nonce }}" type="module" src="/static/app.js"></script>
+
+    <!-- Service Worker 登録 -->
+    <script nonce="{{ .Nonce }}">
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then(function(reg) {
+                    console.log('[SW] Registered:', reg.scope);
+                })
+                .catch(function(err) {
+                    console.error('[SW] Registration failed:', err);
+                });
+        });
+    }
+    </script>
 
     <!-- モバイルメニュー制御 -->
     <script nonce="{{ .Nonce }}">

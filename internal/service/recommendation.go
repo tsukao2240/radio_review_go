@@ -259,7 +259,7 @@ func (s *RecommendationService) extractKeywords(userID int64) ([]string, error) 
 // cleanTitle はタイトルから日本語キーワードを抽出する。
 // 記号を除去して2文字以上の日本語連続文字列を返す。
 var (
-	symbolRe  = regexp.MustCompile(`[「」『』【】（）()\x{301c}\x{ff5e}・、。！？\s]+`)
+	symbolRe   = regexp.MustCompile(`[「」『』【】（）()\x{301c}\x{ff5e}・、。！？\s]+`)
 	japaneseRe = regexp.MustCompile(`[\x{3041}-\x{3096}\x{30A1}-\x{30F6}\x{30FC}\x{4e00}-\x{9fff}\x{3005}]{2,}`)
 )
 
