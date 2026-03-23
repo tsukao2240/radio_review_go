@@ -172,13 +172,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (data.success) {
                 location.reload();
             } else {
-                alert('更新に失敗しました');
+                window.toast ? window.toast.error('更新に失敗しました') : alert('更新に失敗しました');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-sync-alt"></i> おすすめを更新';
             }
         })
         .catch(function (err) {
-            alert('エラーが発生しました: ' + err);
+            window.toast ? window.toast.error('エラーが発生しました: ' + err) : alert('エラーが発生しました: ' + err);
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-sync-alt"></i> おすすめを更新';
         });
