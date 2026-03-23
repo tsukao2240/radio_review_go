@@ -389,3 +389,177 @@ func TestPostService_GetAllTags(t *testing.T) {
 		}
 	})
 }
+
+func TestPostService_GetPostsByProgram(t *testing.T) {
+	t.Run("番組別投稿一覧と件数を返す", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
+				return []model.Post{{ID: 1}, {ID: 2}}, nil
+			},
+			countByProgramFunc: func(stationID, programTitle string) (int, error) { return 7, nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		posts, total, err := svc.GetPostsByProgram("TBS", "jazz show", 20, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(posts) != 2 {
+			t.Errorf("got %d posts, want 2", len(posts))
+		}
+		if total != 7 {
+			t.Errorf("got total=%d, want 7", total)
+		}
+	})
+
+	t.Run("FindByProgram エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		postRepo := &stubPostRepo{
+			findByProgramFunc: func(_, _ string, _, _ int) ([]model.Post, error) { return nil, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, _, err := svc.GetPostsByProgram("TBS", "jazz show", 20, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
+func TestPostService_GetPostsFiltered(t *testing.T) {
+	t.Run("フィルタ付き投稿一覧を返す", func(t *testing.T) {
+		filters := map[string]interface{}{"station_id": "TBS", "min_rating": 4.0}
+		postRepo := &stubPostRepo{
+			findFilteredFunc: func(f map[string]interface{}, limit, offset int) ([]model.Post, error) {
+				return []model.Post{{ID: 1}, {ID: 2}, {ID: 3}}, nil
+			},
+			countFilteredFunc: func(f map[string]interface{}) (int, error) { return 15, nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		posts, total, err := svc.GetPostsFiltered(filters, 10, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(posts) != 3 {
+			t.Errorf("got %d posts, want 3", len(posts))
+		}
+		if total != 15 {
+			t.Errorf("got total=%d, want 15", total)
+		}
+	})
+
+	t.Run("FindFiltered エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("filter error")
+		postRepo := &stubPostRepo{
+			findFilteredFunc: func(_ map[string]interface{}, _, _ int) ([]model.Post, error) { return nil, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, _, err := svc.GetPostsFiltered(nil, 10, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
+func TestPostService_GetAverageRatingByProgram(t *testing.T) {
+	t.Run("平均評価を返す", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			avgRatingFunc: func(programID int64) (float64, error) { return 4.2, nil },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		avg, err := svc.GetAverageRatingByProgram(1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if avg != 4.2 {
+			t.Errorf("got avg=%.1f, want 4.2", avg)
+		}
+	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("avg error")
+		postRepo := &stubPostRepo{
+			avgRatingFunc: func(_ int64) (float64, error) { return 0, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, err := svc.GetAverageRatingByProgram(1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
+func TestPostService_GetPostByID(t *testing.T) {
+	t.Run("IDで投稿を返す", func(t *testing.T) {
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, Title: "my post"}, nil
+			},
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		post, err := svc.GetPostByID(5)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if post.ID != 5 {
+			t.Errorf("got ID=%d, want 5", post.ID)
+		}
+		if post.Title != "my post" {
+			t.Errorf("got Title=%q, want 'my post'", post.Title)
+		}
+	})
+
+	t.Run("not-found エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("not found")
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(_ int64) (*model.Post, error) { return nil, repoErr },
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
+		_, err := svc.GetPostByID(99)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
+func TestPostService_UpdatePost_TagReplace(t *testing.T) {
+	t.Run("tag_ids が渡された場合: 既存タグ削除後に新規タグを付与", func(t *testing.T) {
+		var detachedTags []int64
+		var attachedTags []int64
+
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, UserID: 1}, nil
+			},
+			updateFunc: func(post *model.Post) error { return nil },
+		}
+		tagRepo := &stubTagRepo{
+			findByPostIDFunc: func(postID int64) ([]model.PostTag, error) {
+				return []model.PostTag{{ID: 10}, {ID: 20}}, nil
+			},
+			detachFromPostFunc: func(postID, tagID int64) error {
+				detachedTags = append(detachedTags, tagID)
+				return nil
+			},
+			attachToPostFunc: func(postID, tagID int64) error {
+				attachedTags = append(attachedTags, tagID)
+				return nil
+			},
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, tagRepo)
+		data := map[string]interface{}{
+			"user_id": int64(1),
+			"title":   "updated title",
+			"tag_ids": []interface{}{float64(30), float64(40), float64(50)},
+		}
+		if err := svc.UpdatePost(1, data); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// 既存の2タグが detach されたか確認
+		if len(detachedTags) != 2 {
+			t.Errorf("expected 2 detached tags, got %d", len(detachedTags))
+		}
+		// 新規3タグが attach されたか確認
+		if len(attachedTags) != 3 {
+			t.Errorf("expected 3 attached tags, got %d", len(attachedTags))
+		}
+	})
+}

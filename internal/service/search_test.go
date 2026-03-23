@@ -174,6 +174,97 @@ func TestSearchForAPI_RepoError(t *testing.T) {
 	}
 }
 
+func TestKeywordMD5(t *testing.T) {
+	t.Run("32文字の16進数を返す", func(t *testing.T) {
+		result := keywordMD5("jazz")
+		if len(result) != 32 {
+			t.Errorf("expected 32 chars, got %d: %q", len(result), result)
+		}
+	})
+
+	t.Run("決定的: 同じ入力は同じ出力", func(t *testing.T) {
+		a := keywordMD5("radio")
+		b := keywordMD5("radio")
+		if a != b {
+			t.Errorf("expected same output, got %q and %q", a, b)
+		}
+	})
+
+	t.Run("異なる入力は異なる出力", func(t *testing.T) {
+		a := keywordMD5("jazz")
+		b := keywordMD5("news")
+		if a == b {
+			t.Errorf("expected different outputs, got same: %q", a)
+		}
+	})
+}
+
+func TestGetAllPrograms(t *testing.T) {
+	t.Run("番組一覧と件数を返す", func(t *testing.T) {
+		repo := &stubProgramRepo{
+			countAllFunc: func() (int, error) { return 5, nil },
+			findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
+				return []model.RadioProgram{{ID: 1}, {ID: 2}}, nil
+			},
+		}
+		svc := &RadioProgramSearchService{repo: repo, redis: nil}
+		programs, total, err := svc.GetAllPrograms(10, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(programs) != 2 {
+			t.Errorf("got %d programs, want 2", len(programs))
+		}
+		if total != 5 {
+			t.Errorf("got total=%d, want 5", total)
+		}
+	})
+
+	t.Run("page < 1 は 1 に補正される", func(t *testing.T) {
+		var capturedOffset int
+		repo := &stubProgramRepo{
+			countAllFunc: func() (int, error) { return 0, nil },
+			findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
+				capturedOffset = offset
+				return nil, nil
+			},
+		}
+		svc := &RadioProgramSearchService{repo: repo, redis: nil}
+		_, _, err := svc.GetAllPrograms(10, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capturedOffset != 0 {
+			t.Errorf("expected offset=0, got %d", capturedOffset)
+		}
+	})
+
+	t.Run("CountAll エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("count error")
+		repo := &stubProgramRepo{
+			countAllFunc: func() (int, error) { return 0, repoErr },
+		}
+		svc := &RadioProgramSearchService{repo: repo, redis: nil}
+		_, _, err := svc.GetAllPrograms(10, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+
+	t.Run("FindAll エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("findall error")
+		repo := &stubProgramRepo{
+			countAllFunc: func() (int, error) { return 3, nil },
+			findAllFunc: func(_, _ int) ([]model.RadioProgram, error) { return nil, repoErr },
+		}
+		svc := &RadioProgramSearchService{repo: repo, redis: nil}
+		_, _, err := svc.GetAllPrograms(10, 1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
 func TestSearchProgramsWithPosts_Pagination(t *testing.T) {
 	all := []model.RadioProgram{
 		{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}, {ID: 5},

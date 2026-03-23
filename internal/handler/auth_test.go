@@ -186,3 +186,14 @@ func TestAuthHandler_Logout(t *testing.T) {
 		}
 	})
 }
+
+func TestAuthHandler_ShowRegister(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test"))
+	h := NewAuthHandler(&stubUserRepo{}, store)
+	req := httptest.NewRequest(http.MethodGet, "/register", nil)
+	rr := httptest.NewRecorder()
+	h.ShowRegister(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+}

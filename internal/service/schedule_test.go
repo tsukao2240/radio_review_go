@@ -169,3 +169,36 @@ func TestRecordingScheduleService_Cancel(t *testing.T) {
 		}
 	})
 }
+
+func TestRecordingScheduleService_GetByUser(t *testing.T) {
+	t.Run("予約一覧取得: 成功", func(t *testing.T) {
+		want := []model.RecordingSchedule{{ID: 1, UserID: 3}, {ID: 2, UserID: 3}}
+		repo := &stubScheduleRepo{
+			findByUserFunc: func(userID int64) ([]model.RecordingSchedule, error) {
+				return want, nil
+			},
+		}
+		svc := NewRecordingScheduleService(repo)
+		got, err := svc.GetByUser(3)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("expected 2 schedules, got %d", len(got))
+		}
+	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		repo := &stubScheduleRepo{
+			findByUserFunc: func(userID int64) ([]model.RecordingSchedule, error) {
+				return nil, repoErr
+			},
+		}
+		svc := NewRecordingScheduleService(repo)
+		_, err := svc.GetByUser(1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}

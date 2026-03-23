@@ -1,10 +1,15 @@
 package service
 
 import (
+	"context"
 	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestInsertColon(t *testing.T) {
@@ -152,4 +157,72 @@ func TestRadikoXMLStructure(t *testing.T) {
 	if p.Pfm != "山田太郎" {
 		t.Errorf("got pfm=%q, want 山田太郎", p.Pfm)
 	}
+}
+
+func TestGetCurrentDate(t *testing.T) {
+	// getCurrentDate は午前5時より前なら前日の日付を返すはず
+	// 実際の時刻に依存するのでフォーマットだけ確認
+	date := getCurrentDate()
+	if len(date) != 8 {
+		t.Errorf("expected 8-char date string, got %q (len=%d)", date, len(date))
+	}
+	// YYYYMMDD 形式チェック（数値のみ）
+	for _, c := range date {
+		if c < '0' || c > '9' {
+			t.Errorf("expected numeric date, got %q", date)
+			break
+		}
+	}
+}
+
+func TestNewRadikoApiService(t *testing.T) {
+	svc := NewRadikoApiService(nil, nil)
+	if svc == nil {
+		t.Error("expected non-nil service")
+	}
+}
+
+func TestCacheGetSetRadiko(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	ctx := context.Background()
+
+	t.Run("キャッシュなし: false を返す", func(t *testing.T) {
+		var dest []map[string]interface{}
+		ok := cacheGetRadiko(ctx, rdb, "missing_key", &dest)
+		if ok {
+			t.Error("expected false for missing key")
+		}
+	})
+
+	t.Run("セット後に取得: true を返す", func(t *testing.T) {
+		data := []map[string]interface{}{{"title": "jazz show"}}
+		cacheSetRadiko(ctx, rdb, "test_key", data, time.Minute)
+
+		var dest []map[string]interface{}
+		ok := cacheGetRadiko(ctx, rdb, "test_key", &dest)
+		if !ok {
+			t.Error("expected true after set")
+		}
+		if len(dest) != 1 {
+			t.Errorf("expected 1 item, got %d", len(dest))
+		}
+		if dest[0]["title"] != "jazz show" {
+			t.Errorf("expected title='jazz show', got %v", dest[0]["title"])
+		}
+	})
+
+	t.Run("不正なJSONでfalseを返す", func(t *testing.T) {
+		rdb.Set(ctx, "bad_json", "not-valid-json", time.Minute)
+		var dest []map[string]interface{}
+		ok := cacheGetRadiko(ctx, rdb, "bad_json", &dest)
+		if ok {
+			t.Error("expected false for invalid JSON")
+		}
+	})
 }

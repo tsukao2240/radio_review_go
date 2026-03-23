@@ -330,3 +330,133 @@ func TestPostHandler_GetProgramRating(t *testing.T) {
 		}
 	})
 }
+
+func TestPostHandler_IndexPrograms(t *testing.T) {
+	t.Run("正常: 200", func(t *testing.T) {
+		svc := &stubPostService{
+			getPostsFilteredFunc: func(_ map[string]interface{}, _, _ int) ([]model.Post, int, error) {
+				return []model.Post{{ID: 1}}, 1, nil
+			},
+		}
+		h := NewPostHandler(svc, &stubInteractionService{}, nil)
+		req := httptest.NewRequest(http.MethodGet, "/program", nil)
+		rr := httptest.NewRecorder()
+		h.IndexPrograms(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubPostService{
+			getPostsFilteredFunc: func(_ map[string]interface{}, _, _ int) ([]model.Post, int, error) {
+				return nil, 0, errors.New("db error")
+			},
+		}
+		h := NewPostHandler(svc, &stubInteractionService{}, nil)
+		req := httptest.NewRequest(http.MethodGet, "/program", nil)
+		rr := httptest.NewRecorder()
+		h.IndexPrograms(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
+}
+
+func TestPostHandler_ShowReviewForm(t *testing.T) {
+	t.Run("未認証: /loginにリダイレクト", func(t *testing.T) {
+		h := newPostHandler()
+		r := chi.NewRouter()
+		r.Get("/review/{id}", h.ShowReviewForm)
+		req := httptest.NewRequest(http.MethodGet, "/review/1", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusFound {
+			t.Errorf("got %d, want 302", rr.Code)
+		}
+	})
+	t.Run("認証済み: 200", func(t *testing.T) {
+		h := newPostHandler()
+		r := chi.NewRouter()
+		r.Get("/review/{id}", h.ShowReviewForm)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/review/1", nil), 1)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
+}
+
+func TestPostHandler_ListReviewsByProgram(t *testing.T) {
+	t.Run("正常: 200", func(t *testing.T) {
+		svc := &stubPostService{
+			getPostsByProgramFunc: func(stationID, programTitle string, perPage, page int) ([]model.Post, int, error) {
+				return []model.Post{{ID: 1}}, 1, nil
+			},
+		}
+		h := NewPostHandler(svc, &stubInteractionService{}, nil)
+		r := chi.NewRouter()
+		r.Get("/list/{station_id}/{title}/review", h.ListReviewsByProgram)
+		req := httptest.NewRequest(http.MethodGet, "/list/TBS/jazz+show/review", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubPostService{
+			getPostsByProgramFunc: func(_, _ string, _, _ int) ([]model.Post, int, error) {
+				return nil, 0, errors.New("db error")
+			},
+		}
+		h := NewPostHandler(svc, &stubInteractionService{}, nil)
+		r := chi.NewRouter()
+		r.Get("/list/{station_id}/{title}/review", h.ListReviewsByProgram)
+		req := httptest.NewRequest(http.MethodGet, "/list/TBS/jazz+show/review", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
+}
+
+func TestPostHandler_DeleteComment(t *testing.T) {
+	t.Run("未認証: 401", func(t *testing.T) {
+		h := newPostHandler()
+		body, _ := json.Marshal(map[string]int64{"comment_id": 1})
+		req := httptest.NewRequest(http.MethodPost, "/api/posts/comment/delete", bytes.NewReader(body))
+		rr := httptest.NewRecorder()
+		h.DeleteComment(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("got %d, want 401", rr.Code)
+		}
+	})
+	t.Run("正常削除: 200", func(t *testing.T) {
+		svc := &stubInteractionService{
+			deleteCommentFunc: func(commentID, userID int64) error { return nil },
+		}
+		h := NewPostHandler(&stubPostService{}, svc, nil)
+		body, _ := json.Marshal(map[string]int64{"comment_id": 5})
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/comment/delete", bytes.NewReader(body)), 1)
+		rr := httptest.NewRecorder()
+		h.DeleteComment(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubInteractionService{
+			deleteCommentFunc: func(_, _ int64) error { return errors.New("delete error") },
+		}
+		h := NewPostHandler(&stubPostService{}, svc, nil)
+		body, _ := json.Marshal(map[string]int64{"comment_id": 5})
+		req := withUserID(httptest.NewRequest(http.MethodPost, "/api/posts/comment/delete", bytes.NewReader(body)), 1)
+		rr := httptest.NewRecorder()
+		h.DeleteComment(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
+}

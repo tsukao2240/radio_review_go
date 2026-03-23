@@ -107,3 +107,34 @@ func TestNotificationService_MarkAllAsRead(t *testing.T) {
 		}
 	})
 }
+
+func TestNotificationService_GetAll(t *testing.T) {
+	t.Run("全通知を返す", func(t *testing.T) {
+		notifs := []model.Notification{{ID: 1}, {ID: 2}, {ID: 3}}
+		repo := &stubNotifRepo{
+			findAllFunc: func(userID int64) ([]model.Notification, error) {
+				return notifs, nil
+			},
+		}
+		svc := NewNotificationService(repo)
+		result, err := svc.GetAll(5)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 3 {
+			t.Errorf("expected 3, got %d", len(result))
+		}
+	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		repo := &stubNotifRepo{
+			findAllFunc: func(userID int64) ([]model.Notification, error) { return nil, repoErr },
+		}
+		svc := NewNotificationService(repo)
+		_, err := svc.GetAll(5)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}

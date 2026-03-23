@@ -283,3 +283,75 @@ func TestPostInteractionService_DeleteComment(t *testing.T) {
 		}
 	})
 }
+
+func TestPostInteractionService_GetComments(t *testing.T) {
+	t.Run("コメント一覧取得: 成功", func(t *testing.T) {
+		want := []model.PostComment{{ID: 1, PostID: 5, Body: "good"}, {ID: 2, PostID: 5, Body: "nice"}}
+		commentRepo := &stubCommentRepo{
+			findByPostFunc: func(postID int64) ([]model.PostComment, error) {
+				return want, nil
+			},
+		}
+		svc := NewPostInteractionService(&stubLikeRepo{}, commentRepo)
+		got, err := svc.GetComments(5)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("expected 2 comments, got %d", len(got))
+		}
+	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		commentRepo := &stubCommentRepo{
+			findByPostFunc: func(postID int64) ([]model.PostComment, error) {
+				return nil, repoErr
+			},
+		}
+		svc := NewPostInteractionService(&stubLikeRepo{}, commentRepo)
+		_, err := svc.GetComments(1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
+func TestPostInteractionService_IsLikedBy(t *testing.T) {
+	t.Run("いいね済み: true", func(t *testing.T) {
+		likeRepo := &stubLikeRepo{
+			existsFunc: func(postID, userID int64) (bool, error) { return true, nil },
+		}
+		svc := NewPostInteractionService(likeRepo, &stubCommentRepo{})
+		ok, err := svc.IsLikedBy(1, 10)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !ok {
+			t.Error("expected true, got false")
+		}
+	})
+
+	t.Run("いいね未済: false", func(t *testing.T) {
+		likeRepo := &stubLikeRepo{
+			existsFunc: func(postID, userID int64) (bool, error) { return false, nil },
+		}
+		svc := NewPostInteractionService(likeRepo, &stubCommentRepo{})
+		ok, err := svc.IsLikedBy(1, 10)
+		if err != nil || ok {
+			t.Errorf("expected false/nil, got %v/%v", ok, err)
+		}
+	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		likeRepo := &stubLikeRepo{
+			existsFunc: func(postID, userID int64) (bool, error) { return false, repoErr },
+		}
+		svc := NewPostInteractionService(likeRepo, &stubCommentRepo{})
+		_, err := svc.IsLikedBy(1, 10)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}

@@ -148,3 +148,80 @@ func TestNotificationHandler_MarkAllAsRead(t *testing.T) {
 		}
 	})
 }
+
+func TestNotificationHandler_Index(t *testing.T) {
+	t.Run("未認証: /loginにリダイレクト", func(t *testing.T) {
+		h := NewNotificationHandler(&stubNotifService{}, nil)
+		req := httptest.NewRequest(http.MethodGet, "/notifications", nil)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusFound {
+			t.Errorf("got %d, want 302", rr.Code)
+		}
+		if loc := rr.Header().Get("Location"); loc != "/login" {
+			t.Errorf("got Location=%q, want /login", loc)
+		}
+	})
+	t.Run("認証済み: 200", func(t *testing.T) {
+		svc := &stubNotifService{
+			getAllFunc: func(_ int64) ([]model.Notification, error) {
+				return []model.Notification{{ID: 1}}, nil
+			},
+		}
+		h := NewNotificationHandler(svc, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/notifications", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
+	t.Run("サービスエラー: 500", func(t *testing.T) {
+		svc := &stubNotifService{
+			getAllFunc: func(_ int64) ([]model.Notification, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		h := NewNotificationHandler(svc, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/notifications", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
+}
+
+func TestNotificationHandler_GetAll(t *testing.T) {
+	t.Run("未認証: 401", func(t *testing.T) {
+		h := NewNotificationHandler(&stubNotifService{}, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/notifications/all", nil)
+		rr := httptest.NewRecorder()
+		h.GetAll(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("got %d, want 401", rr.Code)
+		}
+	})
+	t.Run("正常: 200", func(t *testing.T) {
+		svc := &stubNotifService{
+			getAllFunc: func(_ int64) ([]model.Notification, error) {
+				return []model.Notification{{ID: 1}, {ID: 2}}, nil
+			},
+		}
+		h := NewNotificationHandler(svc, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/api/notifications/all", nil), 1)
+		rr := httptest.NewRecorder()
+		h.GetAll(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+		var resp map[string]interface{}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		notifs, _ := resp["notifications"].([]interface{})
+		if len(notifs) != 2 {
+			t.Errorf("expected 2 notifications, got %d", len(notifs))
+		}
+	})
+}

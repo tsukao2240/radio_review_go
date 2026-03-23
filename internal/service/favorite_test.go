@@ -142,3 +142,36 @@ func TestFavoriteService_Check(t *testing.T) {
 		}
 	})
 }
+
+func TestFavoriteService_GetByUser(t *testing.T) {
+	t.Run("お気に入り一覧取得: 成功", func(t *testing.T) {
+		want := []model.FavoriteProgram{{ID: 1, UserID: 5, StationID: "TBS"}, {ID: 2, UserID: 5, StationID: "QRR"}}
+		repo := &stubFavRepo{
+			findByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return want, nil
+			},
+		}
+		svc := NewFavoriteService(repo)
+		got, err := svc.GetByUser(5)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 {
+			t.Errorf("expected 2 favorites, got %d", len(got))
+		}
+	})
+
+	t.Run("DBエラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("db error")
+		repo := &stubFavRepo{
+			findByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return nil, repoErr
+			},
+		}
+		svc := NewFavoriteService(repo)
+		_, err := svc.GetByUser(1)
+		if !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}

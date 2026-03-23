@@ -184,3 +184,58 @@ func TestFavoriteHandler_Check(t *testing.T) {
 		}
 	})
 }
+
+func TestFavoriteHandler_Index(t *testing.T) {
+	t.Run("未認証: /loginにリダイレクト", func(t *testing.T) {
+		h := NewFavoriteHandler(&stubFavService{}, nil)
+		req := httptest.NewRequest(http.MethodGet, "/favorites", nil)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusFound {
+			t.Errorf("got %d, want 302", rr.Code)
+		}
+		if loc := rr.Header().Get("Location"); loc != "/login" {
+			t.Errorf("got Location=%q, want /login", loc)
+		}
+	})
+	t.Run("認証済み: 200", func(t *testing.T) {
+		svc := &stubFavService{
+			getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return []model.FavoriteProgram{{ID: 1}}, nil
+			},
+		}
+		h := NewFavoriteHandler(svc, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+	})
+}
+
+func TestParseInt(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+		isErr bool
+	}{
+		{"42", 42, false},
+		{"0", 0, false},
+		{"-1", -1, false},
+		{"abc", 0, true},
+		{"", 0, true},
+	}
+	for _, tt := range tests {
+		got, err := parseInt(tt.input)
+		if tt.isErr && err == nil {
+			t.Errorf("parseInt(%q): expected error, got nil", tt.input)
+		}
+		if !tt.isErr && err != nil {
+			t.Errorf("parseInt(%q): unexpected error %v", tt.input, err)
+		}
+		if !tt.isErr && got != tt.want {
+			t.Errorf("parseInt(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
