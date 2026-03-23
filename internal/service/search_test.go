@@ -9,15 +9,20 @@ import (
 
 // stubProgramRepo は RadioProgramRepositoryInterface のスタブ実装。
 type stubProgramRepo struct {
-	searchByTitleFunc func(keyword string, limit, offset int) ([]model.RadioProgram, error)
-	searchByCastFunc  func(cast string, limit, offset int) ([]model.RadioProgram, error)
-	countAllFunc      func() (int, error)
-	findAllFunc       func(limit, offset int) ([]model.RadioProgram, error)
+	searchByTitleFunc         func(keyword string, limit, offset int) ([]model.RadioProgram, error)
+	searchByCastFunc          func(cast string, limit, offset int) ([]model.RadioProgram, error)
+	countAllFunc              func() (int, error)
+	findAllFunc               func(limit, offset int) ([]model.RadioProgram, error)
+	findByStationAndTitleFunc func(stationID, title string) (*model.RadioProgram, error)
+	upsertFunc                func(program *model.RadioProgram) (int64, error)
 }
 
 func (r *stubProgramRepo) FindByID(id int64) (*model.RadioProgram, error) { return nil, nil }
 func (r *stubProgramRepo) FindByStationAndTitle(stationID, title string) (*model.RadioProgram, error) {
-	return nil, nil
+	if r.findByStationAndTitleFunc != nil {
+		return r.findByStationAndTitleFunc(stationID, title)
+	}
+	return nil, errors.New("not found")
 }
 func (r *stubProgramRepo) SearchByTitle(keyword string, limit, offset int) ([]model.RadioProgram, error) {
 	if r.searchByTitleFunc != nil {
@@ -44,9 +49,12 @@ func (r *stubProgramRepo) FindAll(limit, offset int) ([]model.RadioProgram, erro
 	}
 	return nil, nil
 }
-func (r *stubProgramRepo) Upsert(p *model.RadioProgram) (int64, error) { return 0, nil }
-func (r *stubProgramRepo) DeleteDuplicates() error                     { return nil }
-func (r *stubProgramRepo) FindByUserPosts(userID int64) ([]model.RadioProgram, error) { return nil, nil }
+func (r *stubProgramRepo) Upsert(p *model.RadioProgram) (int64, error) {
+	if r.upsertFunc != nil {
+		return r.upsertFunc(p)
+	}
+	return 1, nil
+}
 
 func TestSearchForAPI_NilKeywordAndCast(t *testing.T) {
 	svc := &RadioProgramSearchService{repo: &stubProgramRepo{}, redis: nil}
