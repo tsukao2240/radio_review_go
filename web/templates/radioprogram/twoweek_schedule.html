@@ -52,7 +52,7 @@
             {{ if eq (index . "date") $date }}
             <div class="card-base">
                 <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                    <a href="/list/{{ index . "station_id" }}/{{ index . "title" }}"
+                    <a href="/list/{{ index . "station_id" }}/{{ urlpathesc (index . "title") }}"
                        class="hover:underline hover:text-primary-600 transition">
                         {{ index . "title" }}
                     </a>
@@ -65,13 +65,13 @@
                 <div class="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-3">
                     <i class="fas fa-clock mr-1"></i>{{ index . "start" }} - {{ index . "end" }}
                 </div>
-                <button class="btn btn-sm btn-success recording-btn w-100"
+                <button class="recording-btn w-full py-2 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 transition"
                         data-station-id="{{ index . "station_id" }}"
                         data-title="{{ index . "title" }}"
                         data-date="{{ index . "date" }}"
                         data-start="{{ index . "start" }}"
                         data-end="{{ index . "end" }}">
-                    <i class="fas fa-microphone"></i> タイムフリー録音
+                    <i class="fas fa-microphone mr-1"></i>タイムフリー録音
                 </button>
             </div>
             {{ end }}

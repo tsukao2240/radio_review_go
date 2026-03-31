@@ -170,12 +170,13 @@ func (s *RadikoApiService) GetWeeklySchedule(stationID string) ([]map[string]int
 			}
 			weekSet[programDate] = struct{}{}
 			entries = append(entries, map[string]interface{}{
-				"id":    st.ID,
-				"date":  programDate,
-				"title": prog.Title,
-				"cast":  prog.Pfm,
-				"start": startTime,
-				"end":   insertColon(prog.Tol),
+				"id":         st.ID,
+				"station_id": st.ID,
+				"date":       programDate,
+				"title":      prog.Title,
+				"cast":       prog.Pfm,
+				"start":      startTime,
+				"end":        insertColon(prog.Tol),
 			})
 		}
 	}
@@ -239,16 +240,17 @@ func (s *RadikoApiService) GetTwoWeekSchedule(stationID string) ([]map[string]in
 				continue
 			}
 			entries = append(entries, map[string]interface{}{
-				"id":    st.ID,
-				"date":  programDate,
-				"title": prog.Title,
-				"cast":  prog.Pfm,
-				"start": insertColon(prog.Ftl),
-				"end":   insertColon(prog.Tol),
-				"ft":    prog.Ft,
-				"to":    prog.To,
-				"img":   prog.Img,
-				"desc":  prog.Desc,
+				"id":         st.ID,
+				"station_id": st.ID,
+				"date":       programDate,
+				"title":      prog.Title,
+				"cast":       prog.Pfm,
+				"start":      insertColon(prog.Ftl),
+				"end":        insertColon(prog.Tol),
+				"ft":         prog.Ft,
+				"to":         prog.To,
+				"img":        prog.Img,
+				"desc":       prog.Desc,
 			})
 		}
 	}

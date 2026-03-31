@@ -56,10 +56,12 @@ func (r *RecordingScheduleRepository) Create(s *model.RecordingSchedule) (int64,
 	res, err := r.db.NamedExec(
 		`INSERT INTO recording_schedules
 		 (user_id, station_id, program_title, scheduled_start_time, scheduled_end_time,
-		  status, recording_id, error_message, created_at, updated_at)
+		  status, recording_id, error_message, is_recurring, recurrence_type, parent_schedule_id,
+		  created_at, updated_at)
 		 VALUES
 		 (:user_id, :station_id, :program_title, :scheduled_start_time, :scheduled_end_time,
-		  :status, :recording_id, :error_message, NOW(), NOW())`,
+		  :status, :recording_id, :error_message, :is_recurring, :recurrence_type, :parent_schedule_id,
+		  NOW(), NOW())`,
 		s,
 	)
 	if err != nil {

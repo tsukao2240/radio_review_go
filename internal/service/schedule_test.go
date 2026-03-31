@@ -65,7 +65,7 @@ func TestRecordingScheduleService_Schedule(t *testing.T) {
 		}
 		svc := NewRecordingScheduleService(repo)
 		schedule, err := svc.Schedule(1, "TBS", "jazz show",
-			start.Format(time.RFC3339), end.Format(time.RFC3339))
+			start.Format(time.RFC3339), end.Format(time.RFC3339), false, "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -80,7 +80,7 @@ func TestRecordingScheduleService_Schedule(t *testing.T) {
 	t.Run("開始 >= 終了: エラー", func(t *testing.T) {
 		svc := NewRecordingScheduleService(&stubScheduleRepo{})
 		_, err := svc.Schedule(1, "TBS", "jazz show",
-			end.Format(time.RFC3339), start.Format(time.RFC3339))
+			end.Format(time.RFC3339), start.Format(time.RFC3339), false, "")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -88,7 +88,7 @@ func TestRecordingScheduleService_Schedule(t *testing.T) {
 
 	t.Run("不正な時刻フォーマット: エラー", func(t *testing.T) {
 		svc := NewRecordingScheduleService(&stubScheduleRepo{})
-		_, err := svc.Schedule(1, "TBS", "jazz show", "not-a-time", end.Format(time.RFC3339))
+		_, err := svc.Schedule(1, "TBS", "jazz show", "not-a-time", end.Format(time.RFC3339), false, "")
 		if err == nil {
 			t.Fatal("expected parse error, got nil")
 		}
@@ -101,7 +101,7 @@ func TestRecordingScheduleService_Schedule(t *testing.T) {
 		}
 		svc := NewRecordingScheduleService(repo)
 		_, err := svc.Schedule(1, "TBS", "jazz show",
-			start.Format(time.RFC3339), end.Format(time.RFC3339))
+			start.Format(time.RFC3339), end.Format(time.RFC3339), false, "")
 		if !errors.Is(err, repoErr) {
 			t.Errorf("expected repoErr, got %v", err)
 		}

@@ -4,119 +4,192 @@
 {{ with .Data }}
 {{ $entries := index . "Entries" }}
 {{ $latestBroadcast := index . "LatestBroadcast" }}
+{{ $programID := index . "ProgramID" }}
+{{ $stationID := index . "StationID" }}
+{{ $programTitle := index . "ProgramTitle" }}
 
 {{ if $entries }}
 {{ range $entries }}
-<title>{{ index . "title" }}</title>
+<title>{{ index . "title" }} - RadioProgram Review</title>
 {{ end }}
-<div class="d-flex justify-content-sm-around">
-    <div class="col-lg-4">
-        {{ range $entries }}
-        <section>
-            <h3>{{ index . "title" }}</h3>
-            <h5>{{ index . "cast" }}</h5>
-            {{ if index . "image" }}
-            <div>
-                <img src="{{ index . "image" }}" loading="lazy" alt="{{ index . "title" }}">
-            </div>
-            {{ end }}
-            {{ if index . "info" }}
-            <br>
-            <div>{{ index . "info" }}</div>
-            {{ end }}
-            <br>
-            <!-- お気に入りボタン -->
-            <button id="favorite-btn"
-                    class="btn btn-outline-danger mb-3"
-                    style="width: 100%;"
-                    data-station-id="{{ index . "id" }}"
-                    data-title="{{ index . "title" }}">
-                <i class="fas fa-heart"></i> お気に入りに追加
-            </button>
-            <!-- タイムフリー録音 -->
-            {{ if $latestBroadcast }}
-            <div class="timefree-recording-section mb-3">
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i> 直近の放送：{{ index $latestBroadcast "date" }} {{ index $latestBroadcast "start" }}〜{{ index $latestBroadcast "end" }}
-                </div>
-                <button class="btn btn-success recording-btn"
-                        data-station-id="{{ index . "id" }}"
-                        data-title="{{ index . "title" }}"
-                        data-date="{{ index $latestBroadcast "date" }}"
-                        data-start="{{ index $latestBroadcast "start" }}"
-                        data-end="{{ index $latestBroadcast "end" }}">
-                    <i class="fas fa-microphone"></i> この放送を録音する
-                </button>
-            </div>
-            {{ else }}
-            <div class="alert alert-secondary mb-3">
-                <i class="fas fa-exclamation-circle"></i> タイムフリー期間内の放送がありません
-            </div>
-            {{ end }}
-        </section>
-        {{ end }}
+{{ end }}
+
+<div class="max-w-2xl mx-auto px-4">
+
+{{ if $entries }}
+{{ range $entries }}
+<div class="card-base mb-6">
+
+  <!-- タイトル・キャスト -->
+  <div class="mb-4">
+    <h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-1">{{ index . "title" }}</h1>
+    {{ if index . "cast" }}
+    <p class="text-sm text-gray-600 dark:text-gray-400">
+      <i class="fas fa-microphone mr-1"></i>{{ index . "cast" }}
+    </p>
+    {{ end }}
+  </div>
+
+  <!-- 番組画像 -->
+  {{ if index . "image" }}
+  <div class="mb-4 rounded-lg overflow-hidden">
+    <img src="{{ index . "image" }}" loading="lazy" alt="{{ index . "title" }}"
+         class="w-full object-cover max-h-64">
+  </div>
+  {{ end }}
+
+  <!-- 番組情報 -->
+  {{ if index . "info" }}
+  <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">
+    {{ striptags (index . "info") }}
+  </div>
+  {{ end }}
+
+  <!-- お気に入りボタン -->
+  <button id="favorite-btn"
+          class="w-full mb-4 py-2 rounded-lg border-2 border-red-400 text-red-500 dark:text-red-400 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+          data-station-id="{{ index . "id" }}"
+          data-title="{{ index . "title" }}">
+    <i class="fas fa-heart mr-1"></i> お気に入りに追加
+  </button>
+
+  <!-- タイムフリー録音 -->
+  {{ if $latestBroadcast }}
+  <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
+    <p class="text-sm text-blue-700 dark:text-blue-300 mb-2">
+      <i class="fas fa-info-circle mr-1"></i>
+      直近の放送：{{ index $latestBroadcast "date" }} {{ index $latestBroadcast "start" }}〜{{ index $latestBroadcast "end" }}
+    </p>
+    <button class="w-full py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-lg transition recording-btn"
+            data-station-id="{{ index . "id" }}"
+            data-title="{{ index . "title" }}"
+            data-cast="{{ index . "cast" }}"
+            data-date="{{ index $latestBroadcast "date" }}"
+            data-start="{{ index $latestBroadcast "start" }}"
+            data-end="{{ index $latestBroadcast "end" }}">
+      <i class="fas fa-microphone mr-1"></i> この放送を録音する
+    </button>
+  </div>
+  {{ else }}
+  <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-500 dark:text-gray-400">
+    <i class="fas fa-exclamation-circle mr-1"></i> タイムフリー期間内の放送がありません
+  </div>
+  {{ end }}
+
+  <!-- レビューボタン -->
+  <div class="flex gap-2">
+    {{ if $programID }}
+      {{ if $.User }}
+      <a href="/review/{{ $programID }}"
+         class="flex-1 text-center py-2 bg-gray-800 dark:bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition text-sm">
+        <i class="fas fa-pen mr-1"></i> レビューを投稿する
+      </a>
+      {{ else }}
+      <a href="/login"
+         class="flex-1 text-center py-2 bg-gray-800 dark:bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition text-sm">
+        <i class="fas fa-pen mr-1"></i> レビューを投稿する
+      </a>
+      {{ end }}
+    {{ else }}
+    <div class="flex-1 p-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      <i class="fas fa-info-circle mr-1"></i> この番組はまだ登録されていません
     </div>
+    {{ end }}
+    <a href="/list/{{ $stationID }}/{{ urlpathesc $programTitle }}/review"
+       class="flex-1 text-center py-2 border-2 border-gray-700 dark:border-gray-500 text-gray-700 dark:text-gray-300 font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
+      <i class="fas fa-list mr-1"></i> レビューを見る
+    </a>
+  </div>
+
 </div>
 {{ end }}
+{{ end }}
+
+</div>
 
 <script nonce="{{ $.Nonce }}">
 (function() {
-    var btn = document.getElementById('favorite-btn');
-    if (!btn) return;
+  var btn = document.getElementById('favorite-btn');
+  if (!btn) return;
 
-    var stationId = btn.dataset.stationId;
-    var programTitle = btn.dataset.title;
+  var stationId = btn.dataset.stationId;
+  var programTitle = btn.dataset.title;
 
-    function setFavorited(isFav) {
-        if (isFav) {
-            btn.classList.remove('btn-outline-danger');
-            btn.classList.add('btn-danger');
-            btn.innerHTML = '<i class="fas fa-heart"></i> お気に入り済み';
-        } else {
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-outline-danger');
-            btn.innerHTML = '<i class="fas fa-heart"></i> お気に入りに追加';
-        }
+  function setFavorited(isFav) {
+    if (isFav) {
+      btn.className = btn.className.replace('border-red-400 text-red-500 dark:text-red-400', 'border-red-500 bg-red-500 text-white');
+      btn.innerHTML = '<i class="fas fa-heart mr-1"></i> お気に入り済み';
+    } else {
+      btn.className = btn.className.replace('border-red-500 bg-red-500 text-white', 'border-red-400 text-red-500 dark:text-red-400');
+      btn.innerHTML = '<i class="fas fa-heart mr-1"></i> お気に入りに追加';
     }
+  }
 
-    // ページロード時に現在のお気に入り状態を取得
-    fetch('/favorites/check?station_id=' + encodeURIComponent(stationId) + '&program_title=' + encodeURIComponent(programTitle))
-        .then(function(r) { return r.json(); })
-        .then(function(data) { setFavorited(data.is_favorite); })
-        .catch(function() {});
+  fetch('/favorites/check?station_id=' + encodeURIComponent(stationId) + '&program_title=' + encodeURIComponent(programTitle))
+    .then(function(r) { return r.json(); })
+    .then(function(data) { setFavorited(data.is_favorite); })
+    .catch(function() {});
 
-    btn.addEventListener('click', function() {
-        var isFav = btn.classList.contains('btn-danger');
-        var url = isFav ? '/favorites/delete' : '/favorites';
+  btn.addEventListener('click', function() {
+    var isFav = btn.className.indexOf('bg-red-500') !== -1;
+    var url = isFav ? '/favorites/delete' : '/favorites';
+    btn.disabled = true;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ station_id: stationId, program_title: programTitle })
+    })
+    .then(function(r) {
+      if (r.status === 401) { window.location.href = '/login'; return; }
+      if (!r.ok) throw new Error('status ' + r.status);
+      setFavorited(!isFav);
+      if (window.toast) window.toast.success(isFav ? 'お気に入りから削除しました' : 'お気に入りに追加しました');
+    })
+    .catch(function() {
+      if (window.toast) window.toast.error('操作に失敗しました');
+    })
+    .finally(function() { btn.disabled = false; });
+  });
 
-        btn.disabled = true;
-        fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ station_id: stationId, program_title: programTitle })
+  // タイムフリー録音
+  var recordingBtn = document.querySelector('.recording-btn');
+  if (recordingBtn) {
+    recordingBtn.addEventListener('click', function() {
+      var sid   = this.dataset.stationId;
+      var title = this.dataset.title;
+      var cast  = this.dataset.cast;
+      var date  = this.dataset.date;
+      var start = this.dataset.start.replace(':', '');
+      var end   = this.dataset.end.replace(':', '');
+
+      if (!confirm('「' + title + '」を録音しますか？')) return;
+
+      fetch('/recording/timefree/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          station_id: sid,
+          station_name: sid,
+          title: title,
+          cast: cast,
+          start_time: date + start,
+          end_time:   date + end
         })
-        .then(function(r) {
-            if (r.status === 401) {
-                window.location.href = '/login';
-                return;
-            }
-            if (!r.ok) { throw new Error('status ' + r.status); }
-            setFavorited(!isFav);
-            if (window.toast) {
-                window.toast.success(isFav ? 'お気に入りから削除しました' : 'お気に入りに追加しました');
-            }
-        })
-        .catch(function() {
-            if (window.toast) {
-                window.toast.error('操作に失敗しました');
-            } else {
-                alert('操作に失敗しました');
-            }
-        })
-        .finally(function() {
-            btn.disabled = false;
-        });
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          if (window.toast) window.toast.success('録音を開始しました。録音履歴ページで進捗を確認できます。');
+          setTimeout(function() { window.location.href = '/recording/history'; }, 2000);
+        } else {
+          if (window.toast) window.toast.error('エラー: ' + (data.message || '録音の開始に失敗しました'));
+        }
+      })
+      .catch(function() {
+        if (window.toast) window.toast.error('録音リクエスト中にエラーが発生しました');
+      });
     });
+  }
 })();
 </script>
 {{ end }}

@@ -3,64 +3,68 @@
 {{ define "content" }}
 <title>お気に入り番組</title>
 
-<div class="container mt-4">
-    <div class="favorite-header">
-        <h3>お気に入り番組</h3>
-    </div>
+<div class="max-w-3xl mx-auto px-4">
 
-    {{ if .Flash }}
-        <div class="alert alert-success">{{ .Flash }}</div>
-    {{ end }}
+  <h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+    <i class="fas fa-heart mr-2 text-red-500"></i>お気に入り番組
+  </h1>
 
-    {{ with .Data }}
-    {{ $favorites := index . "Favorites" }}
-    {{ if $favorites }}
-        <div class="favorite-list">
-            {{ range $favorites }}
-                <div class="favorite-card">
-                    <div class="favorite-card-header">
-                        <div>
-                            <a href="/list/{{ .StationID }}/{{ .ProgramTitle }}" style="text-decoration: none; color: inherit;">
-                                <div class="favorite-title" style="cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#007bff'" onmouseout="this.style.color='inherit'">{{ .ProgramTitle }}</div>
-                            </a>
-                            {{ if .BroadcastDay }}
-                                <span class="badge bg-secondary" data-broadcast-day="{{ .BroadcastDay }}"></span>
-                            {{ end }}
-                            <span class="favorite-station">{{ .StationID }}</span>
-                        </div>
-                    </div>
-                    <div class="favorite-date">
-                        <i class="far fa-clock"></i> 登録日時: {{ .CreatedAt.Format "2006年01月02日 15:04" }}
-                    </div>
+  {{ if .Flash }}
+  <div class="mb-4 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-300 text-sm">
+    {{ .Flash }}
+  </div>
+  {{ end }}
 
-                    <div class="favorite-actions" style="margin-top: 10px;">
-                        <button class="btn-delete delete-favorite-btn"
-                                data-favorite-id="{{ .ID }}"
-                                data-program-title="{{ .ProgramTitle }}">
-                            <i class="fas fa-trash"></i> 削除
-                        </button>
-                    </div>
-                </div>
+  {{ with .Data }}
+  {{ $favorites := index . "Favorites" }}
+  {{ if $favorites }}
+  <div class="space-y-4">
+    {{ range $favorites }}
+    <div class="card-base">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <a href="/list/{{ .StationID }}/{{ urlpathesc .ProgramTitle }}"
+             class="text-base font-semibold text-primary-600 dark:text-primary-400 hover:underline block truncate">
+            {{ .ProgramTitle }}
+          </a>
+          <div class="flex items-center gap-2 mt-1">
+            {{ if .BroadcastDay }}
+            <span class="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full"
+                  data-broadcast-day="{{ .BroadcastDay }}"></span>
             {{ end }}
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ .StationID }}</span>
+          </div>
+          <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
+            <i class="far fa-clock mr-1"></i>登録日時: {{ .CreatedAt.Format "2006年01月02日 15:04" }}
+          </p>
         </div>
-    {{ else }}
-        <div class="empty-state">
-            <i class="far fa-heart"></i>
-            <p>お気に入り番組がありません</p>
-        </div>
-    {{ end }}
-    {{ end }}
-
-    <div class="back-button">
-        <a href="/schedule" class="btn btn-secondary">
-            <i class="fas fa-arrow-left"></i> 放送中の番組に戻る
-        </a>
+        <button class="delete-favorite-btn flex-shrink-0 text-sm px-3 py-1 border border-red-300 dark:border-red-700 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                data-favorite-id="{{ .ID }}"
+                data-program-title="{{ .ProgramTitle }}">
+          <i class="fas fa-trash mr-1"></i>削除
+        </button>
+      </div>
     </div>
+    {{ end }}
+  </div>
+  {{ else }}
+  <div class="card-base text-center py-12 text-gray-500 dark:text-gray-400">
+    <i class="far fa-heart text-4xl mb-3"></i>
+    <p>お気に入り番組がありません</p>
+  </div>
+  {{ end }}
+  {{ end }}
+
+  <div class="mt-6">
+    <a href="/schedule"
+       class="inline-flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition text-sm font-semibold">
+      <i class="fas fa-arrow-left mr-2"></i>放送中の番組に戻る
+    </a>
+  </div>
 </div>
 
 <script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
-    // 曜日バッジの表示
     var days = ['月', '火', '水', '木', '金', '土', '日'];
     document.querySelectorAll('[data-broadcast-day]').forEach(function(el) {
         var day = parseInt(el.dataset.broadcastDay);

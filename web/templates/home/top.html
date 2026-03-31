@@ -4,151 +4,160 @@
 <title>RadioProgram Review</title>
 
 <!-- ヒーローセクション -->
-<div class="img_body">
-    <div class="container text-center" style="padding-top: 80px; position: relative; z-index: 1;">
-        <h1 class="display-4 fw-bold mb-4" style="color: white; text-shadow: 0 4px 20px rgba(0,0,0,0.3), 0 2px 10px rgba(0,0,0,0.2);">
-            <i class="fas fa-radio" style="color: #ffd700;"></i> RadioProgram Review
-        </h1>
-        <p class="lead mb-4" style="color: rgba(255,255,255,0.95); font-size: 1.25rem; max-width: 700px; margin: 0 auto 30px; text-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-            お気に入りのラジオ番組を見つけて、録音して、レビューを共有しよう
-        </p>
-    </div>
+<div class="relative bg-gradient-to-br from-primary-600 to-primary-900 text-white py-20 px-4 text-center mb-14"
+     style="border-bottom: 1px solid rgba(200,160,80,0.2);">
+  <p class="text-sm uppercase tracking-widest mb-4 text-white/90"
+     style="font-family: 'M PLUS Rounded 1c', sans-serif;letter-spacing: 0.2em;">
+    <i class="fas fa-radio mr-2" style="color: var(--wr-amber-lt, #e8b060);"></i>Radio Program Review
+  </p>
+  <h1 class="text-4xl md:text-5xl font-extrabold mb-5 drop-shadow"
+      style="font-family: 'M PLUS Rounded 1c', sans-serif;letter-spacing: 0.05em; line-height: 1.3;">
+    好きなラジオ番組を、<br class="hidden md:block">もっと深く楽しもう
+  </h1>
+  <p class="text-lg text-white/90 max-w-xl mx-auto" style="line-height: 1.9;">
+    番組を録音して、感想を書いて、<br>同じ趣味のリスナーと分かち合う場所
+  </p>
 </div>
 
-<!-- 主要機能紹介 -->
-<div class="container my-5">
-    <h2 class="text-center mb-5 fw-bold" style="color: var(--bs-body-color);">
-        <i class="fas fa-star" style="color: #ffc107;"></i> 主な機能
-    </h2>
-    <div class="row g-4">
-        <div class="col-lg-4 col-md-6">
-            <div class="card h-100 text-center" style="border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.3s ease; position: relative; overflow: visible;" onmouseover="this.style.transform='translateY(-10px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div class="card-body" style="padding: 40px 30px;">
-                    <div class="mb-4">
-                        <i class="fas fa-microphone fa-3x" style="color: #667eea;"></i>
-                    </div>
-                    <h5 class="card-title fw-bold mb-3">タイムフリー・エリアフリー録音</h5>
-                    <p class="card-text" style="color: #6c757d; margin-bottom: 15px;">
-                        <strong style="color: #667eea;">過去1週間の番組を簡単に録音</strong>。聞き逃しても大丈夫！
-                    </p>
-                    <a href="/timefree" class="btn btn-primary mt-3">
-                        <i class="fas fa-arrow-right"></i> 録音する
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="card h-100 text-center" style="border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-10px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div class="card-body" style="padding: 40px 30px;">
-                    <div class="mb-4">
-                        <i class="fas fa-heart fa-3x" style="color: #dc3545;"></i>
-                    </div>
-                    <h5 class="card-title fw-bold mb-3">お気に入り管理</h5>
-                    <p class="card-text" style="color: #6c757d;">お気に入りの番組を登録して、最新情報を素早くチェック</p>
-                    {{ if .User }}
-                    <a href="/favorites" class="btn btn-primary mt-3">
-                        <i class="fas fa-arrow-right"></i> お気に入りを見る
-                    </a>
-                    {{ else }}
-                    <a href="/login" class="btn btn-primary mt-3">
-                        <i class="fas fa-sign-in-alt"></i> ログインして使う
-                    </a>
-                    {{ end }}
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="card h-100 text-center" style="border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-10px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div class="card-body" style="padding: 40px 30px;">
-                    <div class="mb-4">
-                        <i class="fas fa-book-open fa-3x" style="color: #28a745;"></i>
-                    </div>
-                    <h5 class="card-title fw-bold mb-3">レビュー投稿・閲覧</h5>
-                    <p class="card-text" style="color: #6c757d;">番組の感想を共有して、他のリスナーと交流しよう</p>
-                    <a href="/review/list" class="btn btn-primary mt-3">
-                        <i class="fas fa-arrow-right"></i> レビューを見る
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="card h-100 text-center" style="border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-10px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div class="card-body" style="padding: 40px 30px;">
-                    <div class="mb-4">
-                        <i class="fas fa-search fa-3x" style="color: #17a2b8;"></i>
-                    </div>
-                    <h5 class="card-title fw-bold mb-3">番組検索</h5>
-                    <p class="card-text" style="color: #6c757d;">キーワードで番組を検索して、新しい番組を発見</p>
-                    <a href="/search" class="btn btn-primary mt-3">
-                        <i class="fas fa-arrow-right"></i> 検索する
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="card h-100 text-center" style="border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-10px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div class="card-body" style="padding: 40px 30px;">
-                    <div class="mb-4">
-                        <i class="fas fa-broadcast-tower fa-3x" style="color: #fd7e14;"></i>
-                    </div>
-                    <h5 class="card-title fw-bold mb-3">放送中の番組</h5>
-                    <p class="card-text" style="color: #6c757d;">今放送中の番組をリアルタイムでチェック</p>
-                    <a href="/schedule" class="btn btn-primary mt-3">
-                        <i class="fas fa-arrow-right"></i> 確認する
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="card h-100 text-center" style="border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: transform 0.3s ease;" onmouseover="this.style.transform='translateY(-10px)'" onmouseout="this.style.transform='translateY(0)'">
-                <div class="card-body" style="padding: 40px 30px;">
-                    <div class="mb-4">
-                        <i class="fas fa-calendar-check fa-3x" style="color: #6610f2;"></i>
-                    </div>
-                    <h5 class="card-title fw-bold mb-3">録音予約</h5>
-                    <p class="card-text" style="color: #6c757d;">これから放送される番組を事前に録音予約</p>
-                    {{ if .User }}
-                    <a href="/recording/schedules" class="btn btn-primary mt-3">
-                        <i class="fas fa-arrow-right"></i> 予約する
-                    </a>
-                    {{ else }}
-                    <a href="/login" class="btn btn-primary mt-3">
-                        <i class="fas fa-sign-in-alt"></i> ログインして使う
-                    </a>
-                    {{ end }}
-                </div>
-            </div>
-        </div>
+<!-- 主要機能 -->
+<div class="max-w-5xl mx-auto px-4 mb-16">
+  <h2 class="text-xl font-bold text-center mb-8" style="color: var(--wr-muted, #7a5c44); letter-spacing: 0.1em;">できること</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+    <!-- タイムフリー録音 -->
+    <div class="card-base text-center hover:scale-[1.02] transition-transform duration-200">
+      <div class="mb-4" style="font-size: 2.2rem; color: var(--wr-amber);">
+        <i class="fas fa-microphone"></i>
+      </div>
+      <h3 class="text-base font-bold text-gray-800 dark:text-white mb-2">タイムフリー録音</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" style="line-height: 1.7;">
+        過去1週間の番組をいつでも録音。聞き逃しても大丈夫。
+      </p>
+      <a href="/timefree" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        録音する <i class="fas fa-arrow-right ml-2"></i>
+      </a>
     </div>
+
+    <!-- お気に入り -->
+    <div class="card-base text-center hover:scale-[1.02] transition-transform duration-200">
+      <div class="mb-4" style="font-size: 2.2rem; color: #c05050;">
+        <i class="fas fa-heart"></i>
+      </div>
+      <h3 class="text-base font-bold text-gray-800 dark:text-white mb-2">お気に入り管理</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" style="line-height: 1.7;">
+        気になる番組を登録して、放送日をすぐ確認。
+      </p>
+      {{ if .User }}
+      <a href="/favorites" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        見る <i class="fas fa-arrow-right ml-2"></i>
+      </a>
+      {{ else }}
+      <a href="/login" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        <i class="fas fa-sign-in-alt mr-1"></i>ログインして使う
+      </a>
+      {{ end }}
+    </div>
+
+    <!-- レビュー -->
+    <div class="card-base text-center hover:scale-[1.02] transition-transform duration-200">
+      <div class="mb-4" style="font-size: 2.2rem; color: var(--wr-success, #4a7a4a);">
+        <i class="fas fa-pen-nib"></i>
+      </div>
+      <h3 class="text-base font-bold text-gray-800 dark:text-white mb-2">レビューを書く</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" style="line-height: 1.7;">
+        番組の感想を残して、他のリスナーと語り合おう。
+      </p>
+      <a href="/review/list" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        レビューを見る <i class="fas fa-arrow-right ml-2"></i>
+      </a>
+    </div>
+
+    <!-- 番組検索 -->
+    <div class="card-base text-center hover:scale-[1.02] transition-transform duration-200">
+      <div class="mb-4" style="font-size: 2.2rem; color: #4a7a8a;">
+        <i class="fas fa-search"></i>
+      </div>
+      <h3 class="text-base font-bold text-gray-800 dark:text-white mb-2">番組を探す</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" style="line-height: 1.7;">
+        タイトルやパーソナリティ名で番組を検索。
+      </p>
+      <a href="/search" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        検索する <i class="fas fa-arrow-right ml-2"></i>
+      </a>
+    </div>
+
+    <!-- 放送中 -->
+    <div class="card-base text-center hover:scale-[1.02] transition-transform duration-200">
+      <div class="mb-4" style="font-size: 2.2rem; color: #a06030;">
+        <i class="fas fa-broadcast-tower"></i>
+      </div>
+      <h3 class="text-base font-bold text-gray-800 dark:text-white mb-2">いま放送中</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" style="line-height: 1.7;">
+        今この瞬間に放送されている番組をチェック。
+      </p>
+      <a href="/schedule" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        確認する <i class="fas fa-arrow-right ml-2"></i>
+      </a>
+    </div>
+
+    <!-- 録音予約 -->
+    <div class="card-base text-center hover:scale-[1.02] transition-transform duration-200">
+      <div class="mb-4" style="font-size: 2.2rem; color: #6a5a8a;">
+        <i class="fas fa-calendar-check"></i>
+      </div>
+      <h3 class="text-base font-bold text-gray-800 dark:text-white mb-2">録音を予約する</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4" style="line-height: 1.7;">
+        これから放送される番組を予約して自動録音。
+      </p>
+      {{ if .User }}
+      <a href="/recording/schedules" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        予約する <i class="fas fa-arrow-right ml-2"></i>
+      </a>
+      {{ else }}
+      <a href="/login" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+        <i class="fas fa-sign-in-alt mr-1"></i>ログインして使う
+      </a>
+      {{ end }}
+    </div>
+
+  </div>
 </div>
 
 <!-- CTAセクション -->
-<div class="container my-5">
-    <div class="card text-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 60px 30px; border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.15);">
-        <div class="card-body">
-            <h2 class="fw-bold mb-4" style="color: white; font-size: 2rem;">
-                <i class="fas fa-user-plus"></i> 今すぐ始めよう
-            </h2>
-            <p class="mb-4" style="color: rgba(255,255,255,0.95); font-size: 1.15rem; max-width: 700px; margin: 0 auto;">
-                無料アカウントを作成して、すべての機能を使い始めましょう
-            </p>
-            {{ if .User }}
-            <div>
-                <a href="/timefree" class="btn btn-light btn-lg" style="padding: 12px 40px; font-weight: 600; border-radius: 8px;">
-                    <i class="fas fa-microphone"></i> 録音を始める
-                </a>
-            </div>
-            {{ else }}
-            <div class="d-flex gap-3 justify-content-center flex-wrap">
-                <a href="/register" class="btn btn-light btn-lg" style="padding: 12px 40px; font-weight: 600; border-radius: 8px;">
-                    <i class="fas fa-user-plus"></i> 無料登録
-                </a>
-                <a href="/login" class="btn btn-outline-light btn-lg" style="padding: 12px 40px; font-weight: 600; border-radius: 8px; border-width: 2px;">
-                    <i class="fas fa-sign-in-alt"></i> ログイン
-                </a>
-            </div>
-            {{ end }}
-        </div>
+<div class="max-w-3xl mx-auto px-4 mb-16">
+  <div class="rounded-xl bg-gradient-to-r from-primary-500 to-primary-900 text-white text-center py-12 px-8"
+       style="box-shadow: 0 6px 24px var(--wr-shadow-lg, rgba(80,50,20,0.22)); border: 1px solid rgba(200,160,80,0.2);">
+    <p class="text-xs uppercase tracking-widest mb-3 text-white/90"
+       style="letter-spacing: 0.2em;">
+      はじめましょう
+    </p>
+    <h2 class="text-2xl font-extrabold mb-3"
+        style="font-family: 'M PLUS Rounded 1c', sans-serif;letter-spacing: 0.04em;">
+      無料で使えます
+    </h2>
+    <p class="text-white/90 mb-8" style="line-height: 1.8;">
+      アカウントを作って、録音・レビュー・お気に入りを<br class="hidden md:block">フル活用しましょう。
+    </p>
+    {{ if .User }}
+    <a href="/timefree"
+       class="inline-flex items-center px-7 py-3 font-bold rounded-lg transition text-base"
+       style="background-color: var(--wr-nav-text, #f5e6c8); color: var(--wr-nav-to, #2e1c10);">
+      <i class="fas fa-microphone mr-2"></i>録音を始める
+    </a>
+    {{ else }}
+    <div class="flex flex-wrap gap-4 justify-center">
+      <a href="/register"
+         class="inline-flex items-center px-7 py-3 font-bold rounded-lg transition text-base"
+         style="background-color: var(--wr-nav-text, #f5e6c8); color: var(--wr-nav-to, #2e1c10);">
+        <i class="fas fa-user-plus mr-2"></i>無料登録
+      </a>
+      <a href="/login"
+         class="inline-flex items-center px-7 py-3 border-2 font-bold rounded-lg transition text-base text-white"
+         style="border-color: rgba(245,230,200,0.6);">
+        <i class="fas fa-sign-in-alt mr-2"></i>ログイン
+      </a>
     </div>
+    {{ end }}
+  </div>
 </div>
 {{ end }}

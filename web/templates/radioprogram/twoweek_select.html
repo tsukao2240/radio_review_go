@@ -8,72 +8,62 @@
 {{ $stations := index . "Stations" }}
 {{ $selectedArea := index . "SelectedArea" }}
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="fas fa-podcast"></i> タイムフリー録音</h3>
-    </div>
+<div class="max-w-5xl mx-auto px-4">
+  <h1 class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-6">
+    <i class="fas fa-podcast mr-2"></i>タイムフリー録音
+  </h1>
 
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <i class="fas fa-map-marker-alt"></i> エリア選択
-        </div>
-        <div class="card-body">
-            <form method="GET" action="/timefree" class="row g-3">
-                <div class="col-md-6">
-                    <select name="area" class="form-select" onchange="this.form.submit()">
-                        {{ range $areaID, $areaName := $areas }}
-                            <option value="{{ $areaID }}" {{ if eq $areaID $selectedArea }}selected{{ end }}>
-                                {{ $areaName }}
-                            </option>
-                        {{ end }}
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <span class="text-muted">
-                        <i class="fas fa-info-circle"></i>
-                        エリアを選択すると、その地域の放送局が表示されます
-                    </span>
-                </div>
-            </form>
-        </div>
-    </div>
+  <!-- エリア選択 -->
+  <div class="card-base mb-6">
+    <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
+      <i class="fas fa-map-marker-alt mr-1"></i> エリア選択
+    </h2>
+    <form method="GET" action="/timefree" id="area-form">
+      <select name="area" id="area-select"
+              class="w-full md:w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400">
+        {{ range $areaID, $areaName := $areas }}
+        <option value="{{ $areaID }}" {{ if eq $areaID $selectedArea }}selected{{ end }}>{{ $areaName }}</option>
+        {{ end }}
+      </select>
+    </form>
+  </div>
 
-    <div class="card">
-        <div class="card-header bg-secondary text-white">
-            <i class="fas fa-broadcast-tower"></i> 放送局一覧
-        </div>
-        <div class="card-body">
-            {{ if $stations }}
-                <div class="row">
-                    {{ range $stations }}
-                        {{ if and (index . "id") (index . "name") }}
-                        <div class="col-6 col-md-4 col-lg-3 mb-3">
-                            <a href="/timefree/{{ index . "id" }}?area={{ $selectedArea }}"
-                               class="card h-100 text-decoration-none station-card">
-                                <div class="card-body text-center">
-                                    {{ if index . "logo" }}
-                                        <img src="{{ index . "logo" }}"
-                                             alt="{{ index . "name" }}"
-                                             class="img-fluid mb-2"
-                                             style="max-height: 50px;">
-                                    {{ else }}
-                                        <i class="fas fa-broadcast-tower fa-3x text-muted mb-2"></i>
-                                    {{ end }}
-                                    <h6 class="card-title mb-0">{{ index . "name" }}</h6>
-                                    <small class="text-muted">{{ index . "id" }}</small>
-                                </div>
-                            </a>
-                        </div>
-                        {{ end }}
-                    {{ end }}
-                </div>
-            {{ else }}
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i> 放送局が見つかりませんでした。
-                </div>
-            {{ end }}
-        </div>
+  <!-- 放送局一覧 -->
+  <div class="card-base">
+    <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">
+      <i class="fas fa-broadcast-tower mr-1"></i> 放送局一覧
+    </h2>
+    {{ if $stations }}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      {{ range $stations }}
+      {{ if and (index . "id") (index . "name") }}
+      <a href="/timefree/{{ index . "id" }}?area={{ $selectedArea }}"
+         class="flex flex-col items-center justify-center p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition text-center">
+        {{ if index . "logo" }}
+        <img src="{{ index . "logo" }}" alt="{{ index . "name" }}"
+             class="h-10 object-contain mb-2">
+        {{ else }}
+        <i class="fas fa-broadcast-tower text-3xl text-gray-400 mb-2"></i>
+        {{ end }}
+        <span class="text-sm font-medium text-gray-800 dark:text-white">{{ index . "name" }}</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">{{ index . "id" }}</span>
+      </a>
+      {{ end }}
+      {{ end }}
     </div>
+    {{ else }}
+    <p class="text-gray-500 dark:text-gray-400 text-center py-8">
+      <i class="fas fa-info-circle mr-1"></i> 放送局が見つかりませんでした。
+    </p>
+    {{ end }}
+  </div>
 </div>
+
+<script nonce="{{ $.Nonce }}">
+document.getElementById('area-select').addEventListener('change', function() {
+  document.getElementById('area-form').submit();
+});
+</script>
+
 {{ end }}
 {{ end }}

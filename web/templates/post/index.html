@@ -3,52 +3,70 @@
 {{ define "content" }}
 <title>番組一覧</title>
 
-<div class="container">
-    {{ with .Data }}
-    {{ $results := index . "Results" }}
-    {{ $total := index . "Total" }}
+<div class="max-w-4xl mx-auto px-4">
+{{ with .Data }}
+{{ $results := index . "Results" }}
+{{ $total := index . "Total" }}
 
-    {{ if $results }}
-    <h3 class="caption">番組一覧（{{ $total }}件）</h3>
+<h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+  番組一覧{{ if $total }}（{{ $total }}件）{{ end }}
+</h1>
 
-    <div class="mb-3">
-        <form method="get" action="/program" class="row g-3">
-            <div class="col-md-6">
-                <div class="input-group">
-                    <input type="text" name="search" class="form-control" placeholder="番組名または出演者で検索" value="{{ index $ "Search" }}">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i> 検索
-                    </button>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <select name="per_page" class="form-select" onchange="this.form.submit()">
-                    <option value="10">10件表示</option>
-                    <option value="25">25件表示</option>
-                    <option value="50" selected>50件表示</option>
-                    <option value="100">100件表示</option>
-                </select>
-            </div>
-        </form>
-    </div>
+<!-- 検索・表示件数フォーム -->
+<form method="get" action="/program" class="flex flex-wrap gap-3 mb-6" id="program-search-form">
+  <div class="flex flex-1 min-w-0">
+    <input type="text" name="search" placeholder="番組名または出演者で検索"
+           value="{{ index $ "Search" }}"
+           class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400">
+    <button type="submit"
+            class="px-4 py-2 bg-primary-500 text-white rounded-r-lg hover:bg-primary-600 transition">
+      <i class="fas fa-search"></i>
+    </button>
+  </div>
+  <select name="per_page" id="per-page-select"
+          class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400">
+    <option value="10">10件表示</option>
+    <option value="25">25件表示</option>
+    <option value="50" selected>50件表示</option>
+    <option value="100">100件表示</option>
+  </select>
+</form>
 
-    <div class="program-list">
-        {{ range $results }}
-        <div class="card">
-            <div class="card-header">
-                <a href="/list/{{ .StationID }}/{{ .Title }}">{{ .Title }}</a>
-            </div>
-            <div class="card-body">
-                <div class="program-cast">{{ .Cast }}</div>
-            </div>
-        </div>
-        {{ end }}
+{{ if $results }}
+<div class="space-y-3">
+  {{ range $results }}
+  <div class="card-base flex items-center justify-between gap-4">
+    <div>
+      <a href="/list/{{ .StationID }}/{{ urlpathesc .Title }}"
+         class="text-base font-semibold text-gray-800 dark:text-white hover:text-primary-600 transition">
+        {{ .Title }}
+      </a>
+      {{ if .Cast }}
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+        <i class="fas fa-microphone mr-1"></i>{{ .Cast }}
+      </p>
+      {{ end }}
     </div>
-    {{ else }}
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> 表示する番組がありません。
-    </div>
-    {{ end }}
-    {{ end }}
+    <a href="/list/{{ .StationID }}/{{ urlpathesc .Title }}"
+       class="flex-shrink-0 text-sm text-primary-600 dark:text-primary-400 hover:underline">
+      詳細 <i class="fas fa-chevron-right"></i>
+    </a>
+  </div>
+  {{ end }}
 </div>
+{{ else }}
+<div class="card-base text-center py-12 text-gray-500 dark:text-gray-400">
+  <i class="fas fa-info-circle text-3xl mb-3"></i>
+  <p>表示する番組がありません。</p>
+</div>
+{{ end }}
+
+{{ end }}
+</div>
+
+<script nonce="{{ $.Nonce }}">
+document.getElementById('per-page-select').addEventListener('change', function() {
+  document.getElementById('program-search-form').submit();
+});
+</script>
 {{ end }}

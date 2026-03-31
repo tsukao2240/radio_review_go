@@ -77,6 +77,7 @@ type RecommendationServiceInterface interface {
 // RecordingScheduleServiceInterface - 録音予約管理
 type RecordingScheduleServiceInterface interface {
 	GetByUser(userID int64) ([]model.RecordingSchedule, error)
-	Schedule(userID int64, stationID, programTitle string, startTime, endTime string) (*model.RecordingSchedule, error)
+	// Schedule は録音予約を作成する。isRecurring=true かつ recurrenceType="weekly" の場合は定期録音。
+	Schedule(userID int64, stationID, programTitle string, startTime, endTime string, isRecurring bool, recurrenceType string) (*model.RecordingSchedule, error)
 	Cancel(scheduleID, userID int64) error
 }

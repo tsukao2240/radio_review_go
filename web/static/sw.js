@@ -6,8 +6,10 @@ const STATIC_CACHE_URLS = [
   '/',
   '/static/app.css',
   '/static/app.js',
-  '/favicon.ico',
-  '/manifest.json'
+  '/manifest.json',
+  '/offline.html',
+  '/static/icons/icon-192x192.png',
+  '/static/icons/icon-512x512.png'
 ];
 
 // オフライン時に表示するページ

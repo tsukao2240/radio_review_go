@@ -60,10 +60,12 @@ func (h *ScheduleHandler) Store(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		StationID    string `json:"station_id"`
-		ProgramTitle string `json:"program_title"`
-		StartTime    string `json:"start_time"`
-		EndTime      string `json:"end_time"`
+		StationID      string `json:"station_id"`
+		ProgramTitle   string `json:"program_title"`
+		StartTime      string `json:"start_time"`
+		EndTime        string `json:"end_time"`
+		IsRecurring    bool   `json:"is_recurring"`
+		RecurrenceType string `json:"recurrence_type"` // "weekly"
 	}
 
 	// フォームデータ or JSON を両方受け付ける
@@ -77,6 +79,8 @@ func (h *ScheduleHandler) Store(w http.ResponseWriter, r *http.Request) {
 		req.ProgramTitle = r.FormValue("program_title")
 		req.StartTime = r.FormValue("start_time")
 		req.EndTime = r.FormValue("end_time")
+		req.IsRecurring = r.FormValue("is_recurring") == "true" || r.FormValue("is_recurring") == "1"
+		req.RecurrenceType = r.FormValue("recurrence_type")
 	} else {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "リクエストボディのパースに失敗しました")
@@ -89,7 +93,18 @@ func (h *ScheduleHandler) Store(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schedule, err := h.service.Schedule(userID, req.StationID, req.ProgramTitle, req.StartTime, req.EndTime)
+	// 定期録音の場合は recurrence_type を必須とし "weekly" のみ受け付ける
+	if req.IsRecurring {
+		if req.RecurrenceType == "" {
+			req.RecurrenceType = "weekly"
+		}
+		if req.RecurrenceType != "weekly" {
+			writeError(w, http.StatusUnprocessableEntity, "recurrence_type は 'weekly' のみ対応しています")
+			return
+		}
+	}
+
+	schedule, err := h.service.Schedule(userID, req.StationID, req.ProgramTitle, req.StartTime, req.EndTime, req.IsRecurring, req.RecurrenceType)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return

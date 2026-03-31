@@ -100,12 +100,8 @@ func (s *Scheduler) runDailyAt(ctx context.Context, hour, minute int, fn func(ct
 // ---------------------------------------------------------------------------
 
 // radikoRegionXML は全局一覧 XML のルート要素。
+// 実際の XML: <region><stations><station><id>HBC</id>...
 type radikoRegionXML struct {
-	Regions []radikoRegion `xml:"region"`
-}
-
-// radikoRegion はリージョン要素。
-type radikoRegion struct {
 	Stations []radikoStation `xml:"stations>station"`
 }
 
@@ -120,9 +116,10 @@ type radikoWeeklyXML struct {
 }
 
 // radikoProgNode は番組要素。
+// ftl/tol はローカル時刻の "HHmm" 形式（例: "0500"）。PHP版も同じ属性を使用。
 type radikoProgNode struct {
-	Ft    string `xml:"ft,attr"`
-	To    string `xml:"to,attr"`
+	Ftl   string `xml:"ftl,attr"`
+	Tol   string `xml:"tol,attr"`
 	Title string `xml:"title"`
 	Cast  string `xml:"pfm"`
 	Info  string `xml:"info"`
@@ -151,15 +148,13 @@ func getBroadcastIDs() ([]string, error) {
 
 	seen := make(map[string]struct{})
 	var ids []string
-	for _, region := range root.Regions {
-		for _, st := range region.Stations {
-			if st.ID == "" {
-				continue
-			}
-			if _, ok := seen[st.ID]; !ok {
-				seen[st.ID] = struct{}{}
-				ids = append(ids, st.ID)
-			}
+	for _, st := range root.Stations {
+		if st.ID == "" {
+			continue
+		}
+		if _, ok := seen[st.ID]; !ok {
+			seen[st.ID] = struct{}{}
+			ids = append(ids, st.ID)
 		}
 	}
 	return ids, nil
@@ -189,11 +184,9 @@ func fetchWeeklyPrograms(stationID string) ([]model.RadioProgram, error) {
 		p := model.RadioProgram{
 			StationID: stationID,
 			Title:     node.Title,
-			Start:     insertColon(node.Ft),
-			End:       insertColon(node.To),
-		}
-		if node.Cast != "" {
-			p.Cast = &node.Cast
+			Cast:      node.Cast,
+			Start:     insertColon(node.Ftl),
+			End:       insertColon(node.Tol),
 		}
 		if node.Info != "" {
 			p.Info = &node.Info
@@ -209,19 +202,19 @@ func fetchWeeklyPrograms(stationID string) ([]model.RadioProgram, error) {
 	return programs, nil
 }
 
-// insertColon は "YYYYMMDDHHMM" → "YYYYMMDD HH:MM" に変換する
-// （PHP版の substr_replace($str, ':', 2, 0) と同等の変換）。
-// Radiko の ft/to 属性は "YYYYMMDDHHmm" の12桁文字列。
-// DB の start/end カラムが "HH:MM" 形式の場合は先頭8文字を捨てて ":" を挿入する。
-// ここでは DB に "YYYYMMDDHHmm" のまま格納している既存 Upsert に合わせ
-// PHP の処理（時分の先頭2文字の後に ":" を挿入するのみ）を再現する。
+// insertColon は "HHmm" → "HH:MM" に変換する。
+// PHP版の substr_replace($str, ':', 2, 0) と同等。
+// Radiko の ftl/tol 属性は "HHmm" の4桁文字列（例: "0500" → "05:00"）。
 func insertColon(s string) string {
-	// PHP: substr_replace($s, ':', 2, 0)  →  先頭2文字の直後に ":" を挿入
-	// 例: "202506021300" → "20:2506021300" （PHP の動作をそのまま再現）
 	if len(s) < 2 {
 		return s
 	}
 	return s[:2] + ":" + s[2:]
+}
+
+// InsertRadioPrograms は全局の週間番組表を取得して radio_programs テーブルに UPSERT する（外部からも呼び出し可能）。
+func (s *Scheduler) InsertRadioPrograms(ctx context.Context) {
+	s.insertRadioPrograms(ctx)
 }
 
 // insertRadioPrograms は全局の週間番組表を取得して radio_programs テーブルに UPSERT する。
@@ -234,9 +227,9 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 		return
 	}
 
-	// 全局の番組を収集（重複除去用に map を使用）
+	// 全局の番組を収集（放送局・番組名・キャストで重複除去）
 	type dedupKey struct {
-		stationID, title, start string
+		stationID, title, cast string
 	}
 	seen := make(map[dedupKey]struct{})
 	var allPrograms []model.RadioProgram
@@ -248,7 +241,7 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 			continue
 		}
 		for _, p := range programs {
-			k := dedupKey{p.StationID, p.Title, p.Start}
+			k := dedupKey{p.StationID, p.Title, p.Cast}
 			if _, ok := seen[k]; !ok {
 				seen[k] = struct{}{}
 				allPrograms = append(allPrograms, p)
@@ -261,7 +254,7 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 		return
 	}
 
-	// 1000 件ずつバッチ処理
+	// 1000 件ずつバッチ UPSERT（放送局・番組名・キャストが一致すれば UPDATE）
 	const batchSize = 1000
 	total := len(allPrograms)
 	upserted := 0
@@ -274,8 +267,8 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 		batch := allPrograms[i:end]
 
 		for _, p := range batch {
-			prog := p // ループ変数コピー
-			if _, err := upsertRadioProgram(s.db, &prog); err != nil {
+			prog := p
+			if err := upsertRadioProgram(s.db, &prog); err != nil {
 				log.Printf("[job] insertRadioPrograms: upsert エラー (station=%s title=%s): %v",
 					prog.StationID, prog.Title, err)
 				continue
@@ -287,20 +280,20 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 	log.Printf("[job] insertRadioPrograms: 完了 (upsert 件数: %d / %d)", upserted, total)
 }
 
-// upsertRadioProgram は radio_programs テーブルに ON DUPLICATE KEY UPDATE で書き込む。
-func upsertRadioProgram(db *sqlx.DB, program *model.RadioProgram) (int64, error) {
-	res, err := db.NamedExec(
+// upsertRadioProgram は (station_id, title, cast) をキーに INSERT ... ON DUPLICATE KEY UPDATE する。
+func upsertRadioProgram(db *sqlx.DB, program *model.RadioProgram) error {
+	_, err := db.NamedExec(
 		`INSERT INTO radio_programs (station_id, title, cast, start, end, info, url, image)
 		 VALUES (:station_id, :title, :cast, :start, :end, :info, :url, :image)
 		 ON DUPLICATE KEY UPDATE
-		   cast=VALUES(cast), end=VALUES(end), info=VALUES(info),
-		   url=VALUES(url), image=VALUES(image)`,
+		   start = VALUES(start),
+		   end   = VALUES(end),
+		   info  = VALUES(info),
+		   url   = VALUES(url),
+		   image = VALUES(image)`,
 		program,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +426,59 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 	_ = createRecordingStartNotification(s.db, sc, recordingID)
 
 	log.Printf("[job] 録音完了: id=%d recording_id=%s", sc.ID, recordingID)
+
+	// 定期録音の場合は次回スケジュールを自動生成する
+	if sc.IsRecurring && sc.RecurrenceType != nil {
+		if err := s.createNextRecurringSchedule(sc); err != nil {
+			log.Printf("[job] 次回定期録音スケジュール生成エラー (id=%d): %v", sc.ID, err)
+		}
+	}
+}
+
+// createNextRecurringSchedule は定期録音の次回スケジュールを DB に INSERT する。
+// recurrence_type="weekly" の場合は 7 日後に次回スケジュールを作成する。
+func (s *Scheduler) createNextRecurringSchedule(sc *model.RecordingSchedule) error {
+	var nextStart, nextEnd time.Time
+
+	switch *sc.RecurrenceType {
+	case "weekly":
+		nextStart = sc.ScheduledStartTime.Add(7 * 24 * time.Hour)
+		nextEnd = sc.ScheduledEndTime.Add(7 * 24 * time.Hour)
+	default:
+		return fmt.Errorf("未対応の recurrence_type: %s", *sc.RecurrenceType)
+	}
+
+	parentID := sc.ID
+	recType := *sc.RecurrenceType
+	next := &model.RecordingSchedule{
+		UserID:             sc.UserID,
+		StationID:          sc.StationID,
+		ProgramTitle:       sc.ProgramTitle,
+		ScheduledStartTime: nextStart,
+		ScheduledEndTime:   nextEnd,
+		Status:             "pending",
+		IsRecurring:        true,
+		RecurrenceType:     &recType,
+		ParentScheduleID:   &parentID,
+	}
+
+	res, err := s.db.NamedExec(
+		`INSERT INTO recording_schedules
+		 (user_id, station_id, program_title, scheduled_start_time, scheduled_end_time,
+		  status, is_recurring, recurrence_type, parent_schedule_id, created_at, updated_at)
+		 VALUES
+		 (:user_id, :station_id, :program_title, :scheduled_start_time, :scheduled_end_time,
+		  :status, :is_recurring, :recurrence_type, :parent_schedule_id, NOW(), NOW())`,
+		next,
+	)
+	if err != nil {
+		return fmt.Errorf("createNextRecurringSchedule INSERT: %w", err)
+	}
+
+	newID, _ := res.LastInsertId()
+	log.Printf("[job] 次回定期録音スケジュール生成: id=%d station=%s title=%s start=%s",
+		newID, sc.StationID, sc.ProgramTitle, nextStart.Format("2006-01-02 15:04"))
+	return nil
 }
 
 // findPendingBefore は status=pending かつ scheduled_start_time <= t のスケジュールを返す。

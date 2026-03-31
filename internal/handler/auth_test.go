@@ -154,19 +154,24 @@ func TestAuthHandler_Login_JSONBody(t *testing.T) {
 func TestAuthHandler_Register(t *testing.T) {
 	store := sessions.NewCookieStore([]byte("test-secret"))
 
-	t.Run("必須フィールド未入力: 422", func(t *testing.T) {
+	t.Run("必須フィールド未入力: /registerにリダイレクト", func(t *testing.T) {
+		FlashStore = store
 		h := NewAuthHandler(&stubUserRepo{}, store)
 		form := url.Values{"name": {""}, "email": {""}, "password": {""}, "password_confirmation": {""}}
 		req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rr := httptest.NewRecorder()
 		h.Register(rr, req)
-		if rr.Code != http.StatusUnprocessableEntity {
-			t.Errorf("got %d, want 422", rr.Code)
+		if rr.Code != http.StatusFound {
+			t.Errorf("got %d, want 302", rr.Code)
+		}
+		if rr.Header().Get("Location") != "/register" {
+			t.Errorf("got Location=%s, want /register", rr.Header().Get("Location"))
 		}
 	})
 
-	t.Run("パスワード不一致: 422", func(t *testing.T) {
+	t.Run("パスワード不一致: /registerにリダイレクト", func(t *testing.T) {
+		FlashStore = store
 		h := NewAuthHandler(&stubUserRepo{}, store)
 		form := url.Values{
 			"name":                  {"Alice"},
@@ -178,8 +183,11 @@ func TestAuthHandler_Register(t *testing.T) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rr := httptest.NewRecorder()
 		h.Register(rr, req)
-		if rr.Code != http.StatusUnprocessableEntity {
-			t.Errorf("got %d, want 422", rr.Code)
+		if rr.Code != http.StatusFound {
+			t.Errorf("got %d, want 302", rr.Code)
+		}
+		if rr.Header().Get("Location") != "/register" {
+			t.Errorf("got Location=%s, want /register", rr.Header().Get("Location"))
 		}
 	})
 
@@ -227,6 +235,33 @@ func TestAuthHandler_Register_CreateError(t *testing.T) {
 	h.Register(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("got %d, want 500", rr.Code)
+	}
+}
+
+func TestAuthHandler_Register_DuplicateEmail(t *testing.T) {
+	store := sessions.NewCookieStore([]byte("test-secret"))
+	FlashStore = store
+	userRepo := &stubUserRepo{
+		createFunc: func(user *model.User) (int64, error) {
+			return 0, errors.New("Error 1062 (23000): Duplicate entry 'alice@example.com' for key 'users_email_unique'")
+		},
+	}
+	h := NewAuthHandler(userRepo, store)
+	form := url.Values{
+		"name":                  {"Alice"},
+		"email":                 {"alice@example.com"},
+		"password":              {"pass1234"},
+		"password_confirmation": {"pass1234"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/register", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	h.Register(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Errorf("got %d, want 302", rr.Code)
+	}
+	if rr.Header().Get("Location") != "/register" {
+		t.Errorf("got Location=%s, want /register", rr.Header().Get("Location"))
 	}
 }
 

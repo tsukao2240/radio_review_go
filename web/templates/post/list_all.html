@@ -7,63 +7,71 @@
 {{ $posts := index . "Posts" }}
 {{ $tags := index . "Tags" }}
 
-<!-- フィルターコントロール -->
-<div class="filter-controls">
-    <form method="GET" action="/review/list" class="row g-3">
-        <div class="col-md-3">
-            <label for="min_rating" class="form-label">最低評価</label>
-            <select name="min_rating" id="min_rating" class="form-select">
-                <option value="">すべて</option>
-                <option value="4">4つ星以上</option>
-                <option value="3">3つ星以上</option>
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="tag_id" class="form-label">タグ</label>
-            <select name="tag_id" id="tag_id" class="form-select">
-                <option value="">すべて</option>
-                {{ range $tags }}
-                    <option value="{{ .ID }}">{{ .Name }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="sort_by" class="form-label">並び順</label>
-            <select name="sort_by" id="sort_by" class="form-select">
-                <option value="created_at">投稿日順</option>
-                <option value="likes_count">いいね順</option>
-                <option value="rating">評価順</option>
-            </select>
-        </div>
-        <div class="col-md-3 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100">絞り込み</button>
-        </div>
-    </form>
-</div>
+<div class="max-w-3xl mx-auto px-4">
 
-{{ if $posts }}
-<h3 class="caption">レビュー一覧</h3>
-<br>
-<div id="reviews">
-    <div class="card">
-        {{ range $posts }}
-        <div class="card-header">
-            <a href="/list/{{ .StationID }}/{{ .ProgramTitle }}">{{ .ProgramTitle }}</a>
-        </div>
-        <div class="card-body card_review_body">
-            <dt>{{ .Title }}</dt>
-            <dd>{{ .Body }}</dd>
-        </div>
-        <div class="card-footer card_review_footer">
-            <span class="review_meta">
-                投稿日: {{ .CreatedAt.Format "2006年01月02日" }}
-            </span>
-        </div>
-        {{ end }}
+  <h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+    <i class="fas fa-book-open mr-2"></i>レビュー一覧
+  </h1>
+
+  <!-- フィルター -->
+  <form method="GET" action="/review/list" class="card-base mb-6 flex flex-wrap gap-4 items-end">
+    <div>
+      <label for="min_rating" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">最低評価</label>
+      <select name="min_rating" id="min_rating"
+              class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-400">
+        <option value="">すべて</option>
+        <option value="4">4つ星以上</option>
+        <option value="3">3つ星以上</option>
+      </select>
     </div>
+    <div>
+      <label for="tag_id" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">タグ</label>
+      <select name="tag_id" id="tag_id"
+              class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-400">
+        <option value="">すべて</option>
+        {{ range $tags }}
+        <option value="{{ .ID }}">{{ .Name }}</option>
+        {{ end }}
+      </select>
+    </div>
+    <div>
+      <label for="sort_by" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">並び順</label>
+      <select name="sort_by" id="sort_by"
+              class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-400">
+        <option value="created_at">投稿日順</option>
+        <option value="likes_count">いいね順</option>
+        <option value="rating">評価順</option>
+      </select>
+    </div>
+    <button type="submit"
+            class="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+      <i class="fas fa-filter mr-1"></i>絞り込み
+    </button>
+  </form>
+
+  {{ if $posts }}
+  <div class="space-y-4">
+    {{ range $posts }}
+    <div class="card-base">
+      <a href="/list/{{ .StationID }}/{{ urlpathesc .ProgramTitle }}"
+         class="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:underline mb-2 block">
+        {{ .ProgramTitle }}
+      </a>
+      <p class="text-base font-medium text-gray-800 dark:text-white mb-1">{{ .Title }}</p>
+      <p class="text-sm text-gray-600 dark:text-gray-400">{{ .Body }}</p>
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
+        <i class="far fa-clock mr-1"></i>{{ .CreatedAt.Format "2006年01月02日" }}
+      </p>
+    </div>
+    {{ end }}
+  </div>
+  {{ else }}
+  <div class="card-base text-center py-12 text-gray-500 dark:text-gray-400">
+    <i class="far fa-comment-alt text-4xl mb-3"></i>
+    <p>レビューがまだありません</p>
+  </div>
+  {{ end }}
+
 </div>
-{{ else }}
-<h3 class="caption">レビューがまだありません</h3>
-{{ end }}
 {{ end }}
 {{ end }}

@@ -18,7 +18,7 @@ import (
 // stubScheduleService は RecordingScheduleServiceInterface のスタブ実装。
 type stubScheduleService struct {
 	getByUserFunc func(userID int64) ([]model.RecordingSchedule, error)
-	scheduleFunc  func(userID int64, stationID, programTitle, startTime, endTime string) (*model.RecordingSchedule, error)
+	scheduleFunc  func(userID int64, stationID, programTitle, startTime, endTime string, isRecurring bool, recurrenceType string) (*model.RecordingSchedule, error)
 	cancelFunc    func(scheduleID, userID int64) error
 }
 
@@ -28,9 +28,9 @@ func (s *stubScheduleService) GetByUser(userID int64) ([]model.RecordingSchedule
 	}
 	return nil, nil
 }
-func (s *stubScheduleService) Schedule(userID int64, stationID, programTitle, startTime, endTime string) (*model.RecordingSchedule, error) {
+func (s *stubScheduleService) Schedule(userID int64, stationID, programTitle, startTime, endTime string, isRecurring bool, recurrenceType string) (*model.RecordingSchedule, error) {
 	if s.scheduleFunc != nil {
-		return s.scheduleFunc(userID, stationID, programTitle, startTime, endTime)
+		return s.scheduleFunc(userID, stationID, programTitle, startTime, endTime, isRecurring, recurrenceType)
 	}
 	return &model.RecordingSchedule{ID: 1}, nil
 }
@@ -117,7 +117,7 @@ func TestScheduleHandler_Store(t *testing.T) {
 
 	t.Run("正常予約: 201", func(t *testing.T) {
 		svc := &stubScheduleService{
-			scheduleFunc: func(_ int64, _, _, _, _ string) (*model.RecordingSchedule, error) {
+			scheduleFunc: func(_ int64, _, _, _, _ string, _ bool, _ string) (*model.RecordingSchedule, error) {
 				return &model.RecordingSchedule{ID: 5}, nil
 			},
 		}

@@ -52,7 +52,7 @@
             {{ range $results }}
             <div class="card-base">
                 <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                    <a href="/list/{{ .StationID }}/{{ .Title }}"
+                    <a href="/list/{{ .StationID }}/{{ urlpathesc .Title }}"
                        class="hover:underline hover:text-primary-600 transition">
                         {{ .Title }}
                     </a>

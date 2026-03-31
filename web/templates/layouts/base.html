@@ -35,10 +35,12 @@
 
     <!-- Fonts -->
     <link rel="dns-prefetch" href="//fonts.gstatic.com">
-    <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
 
     <!-- App CSS (Viteビルド成果物 / Font Awesome 含む) -->
     <link rel="stylesheet" href="/static/app.css">
+    <!-- Warm Radio Theme (app.css の後に読み込んで上書き) -->
+    <link rel="stylesheet" href="/static/warm-theme.css">
 </head>
 
 <body>
@@ -223,9 +225,12 @@
         </main>
 
         <!-- フッター -->
-        <footer class="footer bg-body-tertiary mt-8">
-            <div class="container mx-auto px-4 py-4 text-right">
-                <small>&copy; 2024 RadioProgram Review</small>
+        <footer class="mt-12 py-5">
+            <div class="max-w-6xl mx-auto px-4 flex items-center justify-between">
+                <span class="text-sm" style="color: var(--wr-muted);">
+                    <i class="fas fa-radio mr-1" style="color: var(--wr-amber);"></i>RadioProgram Review
+                </span>
+                <small style="color: var(--wr-muted);">&copy; 2024</small>
             </div>
         </footer>
     </div>

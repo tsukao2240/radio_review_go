@@ -3,150 +3,122 @@
 {{ define "content" }}
 <title>おすすめ番組</title>
 
-<div class="container mt-4">
-    <h2 class="mb-4">
-        <i class="fas fa-star text-warning"></i> おすすめ番組
-    </h2>
+<div class="max-w-5xl mx-auto px-4">
+  <h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+    <i class="fas fa-star mr-2 text-yellow-500"></i>おすすめ番組
+  </h1>
 
-    {{ with .Data }}
-    {{ $recommendations := index . "Recommendations" }}
-    {{ $trending := index . "Trending" }}
+  {{ with .Data }}
+  {{ $recommendations := index . "Recommendations" }}
+  {{ $trending := index . "Trending" }}
 
-    <div class="row">
-        <!-- パーソナライズ推薦 -->
-        <div class="col-lg-6 mb-4">
-            <div class="recommendations-section card shadow-sm">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-user-circle"></i> あなたへのおすすめ
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    {{ if $recommendations }}
-                        {{ range $recommendations }}
-                        <div class="recommendation-card border-bottom p-3">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <h5 class="program-title mb-1">{{ index . "title" }}</h5>
-                                    <p class="program-station text-muted mb-1">
-                                        <i class="fas fa-broadcast-tower"></i> {{ index . "station_id" }}
-                                    </p>
-                                    {{ with index . "cast" }}
-                                        <p class="program-cast small mb-1">
-                                            <i class="fas fa-microphone"></i> {{ . }}
-                                        </p>
-                                    {{ end }}
-                                    {{ with index . "avg_rating" }}
-                                        <div class="mt-2">
-                                            <span class="badge bg-warning text-dark">
-                                                ★ {{ . }}
-                                            </span>
-                                            {{ with index $ "reviews_count" }}
-                                                <small class="text-muted">({{ . }}件)</small>
-                                            {{ end }}
-                                        </div>
-                                    {{ end }}
-                                </div>
-                                <div>
-                                    <a href="/list/{{ index . "station_id" }}/{{ index . "title" }}"
-                                       class="btn btn-sm btn-outline-primary">
-                                        詳細 <i class="fas fa-chevron-right"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                        {{ end }}
-                    {{ else }}
-                        <div class="text-center py-5">
-                            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
-                            <p class="text-muted">
-                                お気に入り登録や高評価レビューをすると<br>
-                                あなたにぴったりの番組をおすすめします！
-                            </p>
-                            <a href="/favorites" class="btn btn-primary mt-2">
-                                <i class="fas fa-heart"></i> お気に入りを登録する
-                            </a>
-                        </div>
-                    {{ end }}
-                </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+    <!-- パーソナライズ推薦 -->
+    <div class="card-base p-0 overflow-hidden">
+      <div class="px-4 py-3 bg-primary-50 dark:bg-primary-900/30 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="text-base font-bold text-gray-800 dark:text-white">
+          <i class="fas fa-user-circle mr-2"></i>あなたへのおすすめ
+        </h2>
+      </div>
+      {{ if $recommendations }}
+      <div class="divide-y divide-gray-100 dark:divide-gray-800">
+        {{ range $recommendations }}
+        <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <h3 class="text-sm font-semibold text-gray-800 dark:text-white mb-1 truncate">{{ index . "title" }}</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <i class="fas fa-broadcast-tower mr-1"></i>{{ index . "station_id" }}
+              </p>
+              {{ with index . "cast" }}
+              <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <i class="fas fa-microphone mr-1"></i>{{ . }}
+              </p>
+              {{ end }}
+              {{ with index . "avg_rating" }}
+              <span class="inline-block text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full font-medium">
+                ★ {{ . }}
+              </span>
+              {{ end }}
             </div>
+            <a href="/list/{{ index . "station_id" }}/{{ urlpathesc (index . "title") }}"
+               class="flex-shrink-0 text-xs px-3 py-1.5 border border-primary-400 text-primary-600 dark:text-primary-400 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition">
+              詳細 <i class="fas fa-chevron-right ml-1"></i>
+            </a>
+          </div>
         </div>
-
-        <!-- トレンド番組 -->
-        <div class="col-lg-6 mb-4">
-            <div class="recommendations-section card shadow-sm">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-fire text-danger"></i> 話題の番組
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    {{ if $trending }}
-                        {{ range $trending }}
-                        <div class="recommendation-card border-bottom p-3">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <h5 class="program-title mb-1">{{ index . "title" }}</h5>
-                                    <p class="program-station text-muted mb-1">
-                                        <i class="fas fa-broadcast-tower"></i> {{ index . "station_id" }}
-                                    </p>
-                                    {{ with index . "cast" }}
-                                        <p class="program-cast small mb-1">
-                                            <i class="fas fa-microphone"></i> {{ . }}
-                                        </p>
-                                    {{ end }}
-                                    {{ with index . "avg_rating" }}
-                                        <div class="mt-2">
-                                            <span class="badge bg-danger text-white">
-                                                🔥 ★ {{ . }}
-                                            </span>
-                                            {{ with index $ "recent_reviews_count" }}
-                                                <small class="text-muted">(最近{{ . }}件)</small>
-                                            {{ end }}
-                                        </div>
-                                    {{ end }}
-                                </div>
-                                <div>
-                                    <a href="/list/{{ index . "station_id" }}/{{ index . "title" }}"
-                                       class="btn btn-sm btn-outline-danger">
-                                        詳細 <i class="fas fa-chevron-right"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                        {{ end }}
-                    {{ else }}
-                        <div class="text-center py-5">
-                            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
-                            <p class="text-muted">現在、話題の番組はありません</p>
-                        </div>
-                    {{ end }}
-                </div>
-            </div>
-        </div>
+        {{ end }}
+      </div>
+      {{ else }}
+      <div class="text-center py-12 text-gray-500 dark:text-gray-400 px-4">
+        <i class="fas fa-info-circle fa-3x mb-3"></i>
+        <p class="text-sm mb-4">
+          お気に入り登録や高評価レビューをすると<br>
+          あなたにぴったりの番組をおすすめします！
+        </p>
+        <a href="/favorites"
+           class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+          <i class="fas fa-heart mr-2"></i>お気に入りを登録する
+        </a>
+      </div>
+      {{ end }}
     </div>
 
-    {{ end }}
-
-    <!-- リフレッシュボタン -->
-    <div class="text-center mt-4">
-        <button type="button" id="refresh-btn" class="btn btn-outline-secondary">
-            <i class="fas fa-sync-alt"></i> おすすめを更新
-        </button>
+    <!-- トレンド番組 -->
+    <div class="card-base p-0 overflow-hidden">
+      <div class="px-4 py-3 bg-red-50 dark:bg-red-900/30 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="text-base font-bold text-gray-800 dark:text-white">
+          <i class="fas fa-fire mr-2 text-red-500"></i>話題の番組
+        </h2>
+      </div>
+      {{ if $trending }}
+      <div class="divide-y divide-gray-100 dark:divide-gray-800">
+        {{ range $trending }}
+        <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <h3 class="text-sm font-semibold text-gray-800 dark:text-white mb-1 truncate">{{ index . "title" }}</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <i class="fas fa-broadcast-tower mr-1"></i>{{ index . "station_id" }}
+              </p>
+              {{ with index . "cast" }}
+              <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <i class="fas fa-microphone mr-1"></i>{{ . }}
+              </p>
+              {{ end }}
+              {{ with index . "avg_rating" }}
+              <span class="inline-block text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full font-medium">
+                🔥 ★ {{ . }}
+              </span>
+              {{ end }}
+            </div>
+            <a href="/list/{{ index . "station_id" }}/{{ urlpathesc (index . "title") }}"
+               class="flex-shrink-0 text-xs px-3 py-1.5 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+              詳細 <i class="fas fa-chevron-right ml-1"></i>
+            </a>
+          </div>
+        </div>
+        {{ end }}
+      </div>
+      {{ else }}
+      <div class="text-center py-12 text-gray-500 dark:text-gray-400 px-4">
+        <i class="fas fa-info-circle fa-3x mb-3"></i>
+        <p class="text-sm">現在、話題の番組はありません</p>
+      </div>
+      {{ end }}
     </div>
+
+  </div>
+  {{ end }}
+
+  <div class="text-center">
+    <button type="button" id="refresh-btn"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition text-sm font-semibold">
+      <i class="fas fa-sync-alt mr-2"></i>おすすめを更新
+    </button>
+  </div>
 </div>
-
-<style>
-.recommendations-section .recommendation-card:last-child {
-    border-bottom: none !important;
-}
-.recommendation-card {
-    transition: background-color 0.2s;
-}
-.recommendation-card:hover {
-    background-color: #f8f9fa;
-}
-</style>
 
 <script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function () {
@@ -155,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 更新中...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>更新中...';
 
         var csrfToken = document.querySelector('meta[name="csrf-token"]');
         var headers = { 'Content-Type': 'application/json' };
@@ -174,13 +146,13 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 window.toast ? window.toast.error('更新に失敗しました') : alert('更新に失敗しました');
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-sync-alt"></i> おすすめを更新';
+                btn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>おすすめを更新';
             }
         })
         .catch(function (err) {
             window.toast ? window.toast.error('エラーが発生しました: ' + err) : alert('エラーが発生しました: ' + err);
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-sync-alt"></i> おすすめを更新';
+            btn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>おすすめを更新';
         });
     });
 });

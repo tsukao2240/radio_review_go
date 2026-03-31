@@ -1,42 +1,46 @@
 {{ template "base" . }}
 
 {{ define "content" }}
-<title>レビュー一覧</title>
-
 {{ with .Data }}
 {{ $posts := index . "Posts" }}
 {{ $programTitle := index . "ProgramTitle" }}
 {{ $stationID := index . "StationID" }}
 {{ $programRating := index . "ProgramRating" }}
 
-{{ if $posts }}
-<h3 class="caption">{{ $programTitle }}</h3>
+<title>{{ $programTitle }} のレビュー</title>
 
-{{ if $programRating }}
-<div class="program-rating">
-    <span class="rating-value">★ {{ $programRating }}</span>
+<div class="max-w-3xl mx-auto px-4">
+
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ $programTitle }}</h1>
+    {{ if $programRating }}
+    <p class="text-yellow-500 font-semibold mt-1">★ {{ $programRating }}</p>
+    {{ end }}
+    <a href="/list/{{ $stationID }}/{{ urlpathesc $programTitle }}"
+       class="text-sm text-primary-600 dark:text-primary-400 hover:underline mt-1 inline-block">
+      <i class="fas fa-arrow-left mr-1"></i>番組詳細に戻る
+    </a>
+  </div>
+
+  {{ if $posts }}
+  <div class="space-y-4">
+    {{ range $posts }}
+    <div class="card-base">
+      <h3 class="text-base font-semibold text-gray-800 dark:text-white mb-2">{{ .Title }}</h3>
+      <p class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">{{ .Body }}</p>
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-3">
+        <i class="far fa-clock mr-1"></i>{{ .CreatedAt.Format "2006年01月02日" }}
+      </p>
+    </div>
+    {{ end }}
+  </div>
+  {{ else }}
+  <div class="card-base text-center py-12 text-gray-500 dark:text-gray-400">
+    <i class="far fa-comment-alt text-4xl mb-3"></i>
+    <p>レビューがまだありません</p>
+  </div>
+  {{ end }}
+
 </div>
-{{ end }}
-
-{{ range $posts }}
-<br>
-<div class="card">
-    <div class="card-header">
-        {{ .Title }}
-    </div>
-    <div class="card-body">
-        {{ .Body }}
-    </div>
-    <div class="card-footer card_review_footer">
-        <span class="review_meta">
-            投稿日: {{ .CreatedAt.Format "2006年01月02日" }}
-        </span>
-    </div>
-</div>
-{{ end }}
-
-{{ else }}
-<h3 class="caption">レビューがまだありません</h3>
-{{ end }}
 {{ end }}
 {{ end }}

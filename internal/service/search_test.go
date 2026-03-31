@@ -118,8 +118,7 @@ func TestSearchForAPI_StationIDFilter(t *testing.T) {
 }
 
 func TestSearchForAPI_DeduplicatesUnion(t *testing.T) {
-	castVal := "DJ Jazz"
-	shared := model.RadioProgram{ID: 1, StationID: "TBS", Title: "radio show", Cast: &castVal}
+	shared := model.RadioProgram{ID: 1, StationID: "TBS", Title: "radio show", Cast: "DJ Jazz"}
 	repo := &stubProgramRepo{
 		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
 			return []model.RadioProgram{shared}, nil

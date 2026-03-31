@@ -1,0 +1,353 @@
+/* ================================================================
+   WARM RADIO THEME
+   app.css の後に読み込む。Tailwind / Bootstrap をウォームカラーで上書き。
+   ================================================================ */
+
+/* ---------------------------------------------------------------
+   1. カラーパレット（CSS Custom Properties）
+--------------------------------------------------------------- */
+:root {
+  --wr-bg:        #fdf6e3;   /* 羊皮紙クリーム */
+  --wr-bg-alt:    #f5ede0;   /* やや濃いクリーム */
+  --wr-card:      #fffbf4;   /* カード面 */
+  --wr-border:    #d4b896;   /* 温かみボーダー */
+  --wr-text:      #3d2b1f;   /* メインテキスト（深いブラウン） */
+  --wr-muted:     #7a5c44;   /* サブテキスト */
+  --wr-amber:     #c8892a;   /* 琥珀アクセント */
+  --wr-amber-dk:  #a06820;   /* hover・暗め */
+  --wr-amber-lt:  #e8b060;   /* 明るめ / ライトモードリンク */
+  --wr-danger:    #b83c30;
+  --wr-success:   #4a7a4a;
+  --wr-shadow:    rgba(80, 50, 20, 0.12);
+  --wr-shadow-lg: rgba(80, 50, 20, 0.22);
+  --wr-nav-from:  #5c3d2e;
+  --wr-nav-to:    #2e1c10;
+  --wr-nav-text:  #f5e6c8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wr-bg:        #1c1410;
+    --wr-bg-alt:    #241a14;
+    --wr-card:      #2a1e16;
+    --wr-border:    #4a3020;
+    --wr-text:      #f0e0c0;
+    --wr-muted:     #a08060;
+    --wr-amber:     #e0a040;
+    --wr-amber-dk:  #c08030;
+    --wr-amber-lt:  #f0c070;
+    --wr-danger:    #e05040;
+    --wr-success:   #70a870;
+    --wr-shadow:    rgba(0, 0, 0, 0.4);
+    --wr-shadow-lg: rgba(0, 0, 0, 0.6);
+    --wr-nav-from:  #2e1c10;
+    --wr-nav-to:    #120e0a;
+    --wr-nav-text:  #e8d0a8;
+  }
+}
+
+/* ---------------------------------------------------------------
+   2. ベース
+--------------------------------------------------------------- */
+html, body {
+  background-color: var(--wr-bg) !important;
+  color: var(--wr-text);
+  font-family: 'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', sans-serif;
+}
+
+/* ---------------------------------------------------------------
+   3. タイポグラフィ
+   全体を丸ゴシック（M PLUS Rounded 1c）に統一。明朝体は使わない。
+--------------------------------------------------------------- */
+h1, h2, h3, h4, h5, h6,
+nav, button, a, input, textarea, select, label {
+  font-family: 'M PLUS Rounded 1c', 'Hiragino Kaku Gothic ProN', sans-serif;
+}
+
+h1, h2, h3 {
+  color: var(--wr-text);
+  letter-spacing: 0.02em;
+}
+
+/* Tailwind の text-gray-800 を打ち消す（見出し要素のみ） */
+h1.text-gray-800, h2.text-gray-800, h3.text-gray-800 { color: var(--wr-text) !important; }
+
+/* ---------------------------------------------------------------
+   4. ナビゲーション
+--------------------------------------------------------------- */
+nav[role="navigation"] {
+  background: linear-gradient(135deg, var(--wr-nav-from), var(--wr-nav-to)) !important;
+  box-shadow: 0 2px 12px rgba(30, 15, 5, 0.45) !important;
+  border-bottom: 1px solid rgba(200, 160, 80, 0.18) !important;
+}
+
+nav[role="navigation"] a,
+nav[role="navigation"] > div button {
+  color: var(--wr-nav-text) !important;
+}
+
+nav[role="navigation"] a:hover,
+nav[role="navigation"] > div button:hover {
+  background-color: rgba(200, 160, 80, 0.15) !important;
+}
+
+/* ロゴテキスト */
+nav[role="navigation"] a.font-bold {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  letter-spacing: 0.04em;
+  color: var(--wr-nav-text) !important;
+}
+
+/* ドロップダウン */
+nav[role="navigation"] .group > div[class*="absolute"] {
+  background-color: var(--wr-card) !important;
+  border: 1px solid var(--wr-border) !important;
+  box-shadow: 0 8px 24px var(--wr-shadow-lg) !important;
+}
+
+nav[role="navigation"] .group > div[class*="absolute"] a,
+nav[role="navigation"] .group > div[class*="absolute"] button {
+  color: var(--wr-text) !important;
+}
+
+nav[role="navigation"] .group > div[class*="absolute"] a:hover,
+nav[role="navigation"] .group > div[class*="absolute"] button:hover {
+  background-color: var(--wr-bg-alt) !important;
+}
+
+/* モバイルメニュー */
+#mobile-menu {
+  background: linear-gradient(to bottom, var(--wr-nav-from), var(--wr-nav-to)) !important;
+}
+
+#mobile-menu a,
+#mobile-menu button {
+  color: var(--wr-nav-text) !important;
+}
+
+/* ---------------------------------------------------------------
+   5. カード（.card-base を上書き）
+--------------------------------------------------------------- */
+.card-base {
+  background-color: var(--wr-card) !important;
+  border: 1px solid var(--wr-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 10px var(--wr-shadow) !important;
+  transition: box-shadow 0.25s ease, transform 0.25s ease !important;
+}
+
+.card-base:hover {
+  box-shadow: 0 6px 20px var(--wr-shadow-lg) !important;
+}
+
+/* ---------------------------------------------------------------
+   6. アクセントカラー（primary-* を琥珀色に置換）
+--------------------------------------------------------------- */
+
+/* 背景 */
+.bg-primary-500  { background-color: var(--wr-amber) !important; }
+.bg-primary-600  { background-color: var(--wr-amber-dk) !important; }
+.bg-primary-50   { background-color: #fdf3e0 !important; }
+.bg-primary-100  { background-color: #fae6c0 !important; }
+
+/* hover（Tailwindのエスケープクラス） */
+.hover\:bg-primary-600:hover { background-color: var(--wr-amber-dk) !important; }
+.hover\:bg-primary-500:hover { background-color: var(--wr-amber) !important; }
+
+/* テキスト */
+.text-primary-500 { color: var(--wr-amber) !important; }
+.text-primary-600 { color: var(--wr-amber-dk) !important; }
+.text-primary-700 { color: var(--wr-amber-dk) !important; }
+.text-primary-400 { color: var(--wr-amber-lt) !important; }
+
+/* ボーダー */
+.border-primary-400 { border-color: var(--wr-amber-lt) !important; }
+.border-primary-500 { border-color: var(--wr-amber) !important; }
+
+/* グラデーション（ヒーローセクション等） */
+.from-primary-500,
+.from-primary-600 {
+  --tw-gradient-from: var(--wr-nav-from) var(--tw-gradient-from-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+.to-primary-700,
+.to-primary-900 {
+  --tw-gradient-to: var(--wr-nav-to) var(--tw-gradient-to-position) !important;
+}
+
+/* フォーカスリング */
+.focus\:ring-primary-400:focus {
+  --tw-ring-color: rgba(200, 137, 42, 0.45) !important;
+}
+
+/* ---------------------------------------------------------------
+   7. ダークモード補完
+   Tailwind の dark: 系クラスが当たっている要素を暖色に上書き
+--------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  .dark\:text-primary-400 { color: var(--wr-amber-lt) !important; }
+
+  /* カード・フォーム背景 */
+  .dark\:bg-gray-700 { background-color: #30201a !important; }
+  .dark\:bg-gray-800 { background-color: var(--wr-bg-alt) !important; }
+  .dark\:bg-gray-900 { background-color: var(--wr-bg) !important; }
+
+  /* ボーダー */
+  .dark\:border-gray-600 { border-color: var(--wr-border) !important; }
+  .dark\:border-gray-700 { border-color: var(--wr-border) !important; }
+
+  /* テキスト */
+  .dark\:text-white     { color: var(--wr-text) !important; }
+  .dark\:text-gray-300  { color: #d0b090 !important; }
+  .dark\:text-gray-400  { color: var(--wr-muted) !important; }
+  .dark\:text-gray-500  { color: var(--wr-muted) !important; }
+
+  /* primary dark overrides */
+  .dark\:bg-primary-900\/30 { background-color: rgba(90, 50, 10, 0.3) !important; }
+  .dark\:border-primary-700 { border-color: rgba(180, 120, 40, 0.45) !important; }
+
+  /* sticky 背景 */
+  .sticky.bg-white,
+  .sticky.dark\:bg-gray-900 { background-color: var(--wr-bg) !important; }
+
+  /* テーブル */
+  .dark\:divide-gray-800 > * + * { border-color: var(--wr-border) !important; }
+  .dark\:hover\:bg-gray-800\/50:hover { background-color: rgba(42, 30, 22, 0.5) !important; }
+}
+
+/* ---------------------------------------------------------------
+   8. フォーム要素
+--------------------------------------------------------------- */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  background-color: var(--wr-card);
+  border-color: var(--wr-border);
+  color: var(--wr-text);
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--wr-amber) !important;
+  box-shadow: 0 0 0 3px rgba(200, 137, 42, 0.2) !important;
+  outline: none !important;
+}
+
+/* readonly / disabled */
+input[readonly],
+input[disabled] {
+  background-color: var(--wr-bg-alt) !important;
+  color: var(--wr-muted) !important;
+}
+
+/* ---------------------------------------------------------------
+   9. フラッシュ・通知系（green / red アラート）
+--------------------------------------------------------------- */
+/* 成功 */
+.bg-green-50    { background-color: #f0f5e8 !important; }
+.border-green-200 { border-color: #c8d8a8 !important; }
+.text-green-700  { color: var(--wr-success) !important; }
+.text-green-300  { color: #90c870 !important; }
+
+/* エラー */
+.bg-red-50      { background-color: #fdf0ee !important; }
+.border-red-200 { border-color: #e8b8b0 !important; }
+.text-red-700   { color: var(--wr-danger) !important; }
+
+/* ---------------------------------------------------------------
+   10. フッター
+--------------------------------------------------------------- */
+footer {
+  background-color: var(--wr-bg-alt) !important;
+  border-top: 1px solid var(--wr-border) !important;
+  color: var(--wr-muted) !important;
+  position: static !important; /* Bootstrap の fixed をリセット */
+}
+
+/* ---------------------------------------------------------------
+   11. ヒーローセクション（home/top.html）
+   グラデ上のテキストをクリーム系に
+--------------------------------------------------------------- */
+.text-white\/90 { color: rgba(245, 230, 200, 0.92) !important; }
+
+/* CTA セクション内のボーダー付きボタン */
+.border-2.border-white { border-color: rgba(245, 230, 200, 0.7) !important; }
+.hover\:bg-white\/10:hover { background-color: rgba(245, 230, 200, 0.12) !important; }
+
+/* CTA 白ボタン（「無料登録」など） */
+.bg-white.text-primary-700 {
+  background-color: var(--wr-nav-text) !important;
+  color: var(--wr-nav-to) !important;
+}
+.hover\:bg-gray-100:hover { background-color: #e8d5b0 !important; }
+
+/* ---------------------------------------------------------------
+   12. バッジ・ステータス（amber系を温かみに統一）
+--------------------------------------------------------------- */
+.text-yellow-500 { color: var(--wr-amber) !important; }
+.bg-yellow-100   { background-color: #fae6c0 !important; }
+.text-yellow-700 { color: var(--wr-amber-dk) !important; }
+.text-yellow-400 { color: var(--wr-amber-lt) !important; }
+.bg-yellow-900\/30 { background-color: rgba(100, 60, 0, 0.28) !important; }
+
+/* ---------------------------------------------------------------
+   13. セカンダリ系ボタン・リンク（gray 系）
+--------------------------------------------------------------- */
+.bg-gray-100.dark\:bg-gray-700,
+.bg-gray-100 {
+  background-color: var(--wr-bg-alt) !important;
+  color: var(--wr-text) !important;
+}
+.hover\:bg-gray-200:hover { background-color: var(--wr-cream-dark, #e8dcc8) !important; }
+
+/* スケジュールページ日付ナビゲーション */
+.bg-gray-100.dark\:bg-gray-700.text-gray-700 {
+  background-color: var(--wr-bg-alt) !important;
+  color: var(--wr-text) !important;
+  border: 1px solid var(--wr-border) !important;
+}
+
+.hover\:bg-primary-100:hover { background-color: #fae6c0 !important; }
+.dark\:hover\:bg-primary-900:hover { background-color: rgba(90, 50, 10, 0.4) !important; }
+
+/* ---------------------------------------------------------------
+   14. テーブル
+--------------------------------------------------------------- */
+table { border-collapse: collapse; }
+
+thead th {
+  color: var(--wr-muted) !important;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-weight: 600;
+}
+
+.divide-gray-100 > * + * { border-color: var(--wr-bg-alt) !important; }
+
+/* ---------------------------------------------------------------
+   15. スクロールバー（Webkit）
+--------------------------------------------------------------- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--wr-bg-alt); }
+::-webkit-scrollbar-thumb {
+  background: var(--wr-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--wr-amber-lt); }
+
+/* ---------------------------------------------------------------
+   16. アニメーション微調整
+--------------------------------------------------------------- */
+/* hover:scale-105 の代わりに warm な浮き上がりを使うページは
+   CSS側で追加定義するが、Tailwindのscaleはそのままでも問題なし */
+
+/* ---------------------------------------------------------------
+   17. 通知ページ（border-l-4 colored）
+--------------------------------------------------------------- */
+.border-green-500 { border-left-color: var(--wr-success) !important; }
+.border-red-500   { border-left-color: var(--wr-danger) !important; }
+.border-yellow-500 { border-left-color: var(--wr-amber) !important; }

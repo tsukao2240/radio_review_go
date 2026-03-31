@@ -26,7 +26,8 @@ func (s *RecordingScheduleService) GetByUser(userID int64) ([]model.RecordingSch
 // Schedule は録音予約を作成する。
 // startTime・endTime は RFC3339 または "2006-01-02 15:04:05" 形式を受け付ける。
 // startTime < endTime でなければエラーを返す。
-func (s *RecordingScheduleService) Schedule(userID int64, stationID, programTitle string, startTime, endTime string) (*model.RecordingSchedule, error) {
+// isRecurring=true かつ recurrenceType="weekly" の場合は定期録音として登録する。
+func (s *RecordingScheduleService) Schedule(userID int64, stationID, programTitle string, startTime, endTime string, isRecurring bool, recurrenceType string) (*model.RecordingSchedule, error) {
 	// 時刻パース（RFC3339 を優先し、失敗したら一般的な形式を試みる）
 	layouts := []string{
 		time.RFC3339,
@@ -63,6 +64,11 @@ func (s *RecordingScheduleService) Schedule(userID int64, stationID, programTitl
 		return nil, errors.New("開始時刻は終了時刻より前でなければなりません")
 	}
 
+	var recType *string
+	if isRecurring && recurrenceType != "" {
+		recType = &recurrenceType
+	}
+
 	schedule := &model.RecordingSchedule{
 		UserID:             userID,
 		StationID:          stationID,
@@ -70,6 +76,8 @@ func (s *RecordingScheduleService) Schedule(userID int64, stationID, programTitl
 		ScheduledStartTime: start,
 		ScheduledEndTime:   end,
 		Status:             "pending",
+		IsRecurring:        isRecurring,
+		RecurrenceType:     recType,
 	}
 
 	id, err := s.repo.Create(schedule)

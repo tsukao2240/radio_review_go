@@ -3,65 +3,77 @@
 {{ define "content" }}
 <title>{{ if .User }}{{ .User.Name }}さんのマイページ{{ else }}マイページ{{ end }}</title>
 
+<div class="max-w-3xl mx-auto px-4">
+
 {{ if .Flash }}
-<div class="container mt-3">
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        {{ .Flash }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
+<div class="mb-4 p-3 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-300 text-sm">
+  {{ .Flash }}
 </div>
 {{ end }}
 
 {{ with .Data }}
 {{ $posts := index . "Posts" }}
 
+<h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+  {{ if $.User }}{{ $.User.Name }}さん{{ end }}が投稿したレビュー
+</h1>
+
 {{ if $posts }}
-<div class="mypage-header">
-    <h3>{{ if $.User }}{{ $.User.Name }}さん{{ end }}が投稿したレビュー</h3>
+<div class="space-y-4" id="reviews">
+  {{ range $posts }}
+  <div class="card-base">
+    <div class="flex items-start justify-between gap-4 mb-2">
+      <a href="/list/{{ .StationID }}/{{ urlpathesc .ProgramTitle }}"
+         class="text-base font-semibold text-primary-600 dark:text-primary-400 hover:underline">
+        {{ .ProgramTitle }}
+      </a>
+      <div class="flex gap-2 flex-shrink-0">
+        <a href="/my/edit/{{ .ID }}"
+           class="text-sm px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+          <i class="fas fa-edit mr-1"></i>編集
+        </a>
+        <button type="button"
+                class="text-sm px-3 py-1 border border-red-300 dark:border-red-700 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition delete-btn"
+                data-post-id="{{ .ID }}">
+          <i class="fas fa-trash mr-1"></i>削除
+        </button>
+      </div>
+    </div>
+    <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ .Title }}</p>
+    <p class="text-sm text-gray-600 dark:text-gray-400">{{ .Body }}</p>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
+      <i class="far fa-clock mr-1"></i>{{ .CreatedAt.Format "2006年01月02日" }}
+    </p>
+  </div>
+  {{ end }}
 </div>
 
-<div id="reviews">
-    {{ range $posts }}
-    <div class="review-card">
-        <div class="review-card-header">
-            <a href="/list/{{ .StationID }}/{{ .ProgramTitle }}">
-                {{ .ProgramTitle }}
-            </a>
-            <div class="review-actions">
-                <a href="/my/edit/{{ .ID }}" class="btn-edit">
-                    <i class="fas fa-edit"></i> 編集
-                </a>
-                <form method="POST" action="/my" style="display: inline;">
-                    <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
-                    <input type="hidden" name="post_id" value="{{ .ID }}">
-                    <button type="submit" class="btn-delete-review" onclick="return confirm('このレビューを削除しますか？')">
-                        <i class="fas fa-trash"></i> 削除
-                    </button>
-                </form>
-            </div>
-        </div>
-        <div class="review-card-body">
-            <div class="review-title">{{ .Title }}</div>
-            <div class="review-content">{{ .Body }}</div>
-        </div>
-        <div class="review-card-footer">
-            <span class="review-meta">
-                <i class="far fa-clock"></i>
-                投稿日: {{ .CreatedAt.Format "2006年01月02日" }}
-            </span>
-        </div>
-    </div>
-    {{ end }}
-</div>
+<!-- 削除用の隠しフォーム -->
+<form id="delete-form" method="POST" action="/my" class="hidden">
+  <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
+  <input type="hidden" name="post_id" id="delete-post-id">
+</form>
 
 {{ else }}
-<div class="empty-state">
-    <i class="far fa-edit"></i>
-    <p>まだ投稿がありません</p>
-    <a href="/schedule" class="btn btn-primary">
-        <i class="fas fa-plus"></i> レビューを投稿する
-    </a>
+<div class="card-base text-center py-16 text-gray-500 dark:text-gray-400">
+  <i class="far fa-edit text-4xl mb-4"></i>
+  <p class="mb-4">まだ投稿がありません</p>
+  <a href="/schedule" class="inline-flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition text-sm font-semibold">
+    <i class="fas fa-plus mr-2"></i>レビューを投稿する
+  </a>
 </div>
 {{ end }}
+
 {{ end }}
+</div>
+
+<script nonce="{{ $.Nonce }}">
+document.querySelectorAll('.delete-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    if (!confirm('このレビューを削除しますか？')) return;
+    document.getElementById('delete-post-id').value = this.dataset.postId;
+    document.getElementById('delete-form').submit();
+  });
+});
+</script>
 {{ end }}

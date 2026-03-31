@@ -7,7 +7,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 
 	"github.com/gorilla/sessions"
 	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
@@ -87,7 +89,19 @@ func RenderWithBase(w http.ResponseWriter, r *http.Request, tmplPath string, dat
 		return
 	}
 
-	t, err := template.ParseFiles(baseTmpl, tmplPath)
+	htmlTagRe := regexp.MustCompile(`<[^>]+>`)
+	funcMap := template.FuncMap{
+		// urlpathesc は URL パスセグメントとして安全にエスケープする（# → %23 など）。
+		// template.URL を返すことでテンプレートエンジンの二重エスケープを防ぐ。
+		"urlpathesc": func(s string) template.URL { return template.URL(url.PathEscape(s)) },
+		// striptags は <br> を改行に変換してから HTML タグを除去する。
+		"striptags": func(s string) string {
+			brRe := regexp.MustCompile(`(?i)<br\s*/?>`)
+			s = brRe.ReplaceAllString(s, "\n")
+			return htmlTagRe.ReplaceAllString(s, "")
+		},
+	}
+	t, err := template.New("").Funcs(funcMap).ParseFiles(baseTmpl, tmplPath)
 	if err != nil {
 		log.Printf("RenderWithBase ParseFiles error (%s): %v", tmplPath, err)
 		http.Error(w, "template error", http.StatusInternalServerError)

@@ -89,7 +89,7 @@ func (s *RecommendationService) GetTrendingPrograms(days, limit int) ([]map[stri
 		programID          int64
 		title              string
 		stationID          string
-		cast               *string
+		cast               string
 		recentReviewsCount int
 		avgRating          float64
 	}
@@ -152,8 +152,8 @@ func (s *RecommendationService) GetTrendingPrograms(days, limit int) ([]map[stri
 			"avg_rating":           fmt.Sprintf("%.1f", e.avgRating),
 			"recent_reviews_count": e.recentReviewsCount,
 		}
-		if e.cast != nil {
-			m["cast"] = *e.cast
+		if e.cast != "" {
+			m["cast"] = e.cast
 		}
 		result = append(result, m)
 	}
@@ -276,7 +276,7 @@ func (s *RecommendationService) findSimilarPrograms(keywords []string) ([]map[st
 		id        int64
 		title     string
 		stationID string
-		cast      *string
+		cast      string
 		avgRating float64
 		reviews   int
 	}
@@ -339,8 +339,8 @@ func (s *RecommendationService) findSimilarPrograms(keywords []string) ([]map[st
 			"avg_rating":    fmt.Sprintf("%.1f", e.avgRating),
 			"reviews_count": e.reviews,
 		}
-		if e.cast != nil {
-			m["cast"] = *e.cast
+		if e.cast != "" {
+			m["cast"] = e.cast
 		}
 		result = append(result, m)
 	}
@@ -358,7 +358,7 @@ func (s *RecommendationService) getPopularPrograms(limit int) ([]map[string]inte
 		id        int64
 		title     string
 		stationID string
-		cast      *string
+		cast      string
 		avgRating float64
 		reviews   int
 	}
@@ -406,8 +406,8 @@ func (s *RecommendationService) getPopularPrograms(limit int) ([]map[string]inte
 			"avg_rating":    fmt.Sprintf("%.1f", e.avgRating),
 			"reviews_count": e.reviews,
 		}
-		if e.cast != nil {
-			m["cast"] = *e.cast
+		if e.cast != "" {
+			m["cast"] = e.cast
 		}
 		result = append(result, m)
 	}

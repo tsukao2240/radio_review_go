@@ -43,9 +43,9 @@ type RadioProgram struct {
 	ID        int64      `db:"id"`
 	StationID string     `db:"station_id"`
 	Title     string     `db:"title"`
-	Cast      *string    `db:"cast"`
-	Start     string     `db:"start"` // YYYYMMDDHHMM
-	End       string     `db:"end"`   // YYYYMMDDHHMM
+	Cast      string     `db:"cast"` // NOT NULL DEFAULT ''
+	Start     string     `db:"start"` // HH:MM 形式
+	End       string     `db:"end"`   // HH:MM 形式
 	Info      *string    `db:"info"`
 	URL       *string    `db:"url"`
 	Image     *string    `db:"image"`
@@ -75,6 +75,9 @@ type RecordingSchedule struct {
 	Status             string    `db:"status"` // pending/recording/completed/failed/cancelled
 	RecordingID        *string   `db:"recording_id"`
 	ErrorMessage       *string   `db:"error_message"`
+	IsRecurring        bool      `db:"is_recurring"`      // 定期録音フラグ
+	RecurrenceType     *string   `db:"recurrence_type"`   // "weekly" など
+	ParentScheduleID   *int64    `db:"parent_schedule_id"` // 前回スケジュールのID
 	CreatedAt          time.Time `db:"created_at"`
 	UpdatedAt          time.Time `db:"updated_at"`
 }

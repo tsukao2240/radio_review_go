@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/sessions"
 	"github.com/yourname/radio_review_go/internal/middleware"
@@ -137,13 +138,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// バリデーション: 必須チェック
 	if name == "" || email == "" || password == "" || passwordConfirmation == "" {
-		writeError(w, http.StatusUnprocessableEntity, "name, email, password, password_confirmation は必須です")
+		SetFlash(r, w,"name, email, password, password_confirmation は必須です")
+		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
 
 	// バリデーション: パスワード一致確認
 	if password != passwordConfirmation {
-		writeError(w, http.StatusUnprocessableEntity, "パスワードと確認用パスワードが一致しません")
+		SetFlash(r, w,"パスワードと確認用パスワードが一致しません")
+		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
 
@@ -162,7 +165,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := h.userRepo.Create(user)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "ユーザーの作成に失敗しました: "+err.Error())
+		if strings.Contains(err.Error(), "1062") || strings.Contains(err.Error(), "Duplicate entry") {
+			SetFlash(r, w,"このメールアドレスはすでに登録されています")
+			http.Redirect(w, r, "/register", http.StatusFound)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "ユーザーの作成に失敗しました")
 		return
 	}
 

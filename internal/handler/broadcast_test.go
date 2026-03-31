@@ -10,8 +10,33 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/yourname/radio_review_go/internal/repository"
 	"github.com/yourname/radio_review_go/internal/service"
 )
+
+// stubBroadcastProgramRepo は RadioProgramRepositoryInterface の最小スタブ。
+type stubBroadcastProgramRepo struct{}
+
+func (s *stubBroadcastProgramRepo) FindByID(id int64) (*model.RadioProgram, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) FindByStationAndTitle(stationID, title string) (*model.RadioProgram, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) SearchByTitle(keyword string, limit, offset int) ([]model.RadioProgram, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) SearchByCast(cast string, limit, offset int) ([]model.RadioProgram, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) CountByTitle(keyword string) (int, error) { return 0, nil }
+func (s *stubBroadcastProgramRepo) FindAll(limit, offset int) ([]model.RadioProgram, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) CountAll() (int, error)                              { return 0, nil }
+func (s *stubBroadcastProgramRepo) Upsert(prog *model.RadioProgram) (int64, error)      { return 0, nil }
+
+var _ repository.RadioProgramRepositoryInterface = (*stubBroadcastProgramRepo)(nil)
 
 // stubRadikoService は RadikoApiServiceInterface のスタブ実装。
 type stubRadikoService struct {
@@ -95,7 +120,7 @@ func TestBroadcastHandlerSearch(t *testing.T) {
 	t.Run("no keyword returns 200 without calling SearchForAPI", func(t *testing.T) {
 		radikoSvc := &stubRadikoService{}
 		searchSvc := &stubSearchService{}
-		h := NewBroadcastHandler(radikoSvc, searchSvc)
+		h := NewBroadcastHandler(radikoSvc, searchSvc, &stubBroadcastProgramRepo{})
 
 		req := httptest.NewRequest(http.MethodGet, "/search", nil)
 		rr := httptest.NewRecorder()
@@ -112,7 +137,7 @@ func TestBroadcastHandlerSearch(t *testing.T) {
 	t.Run("keyword param calls SearchForAPI and returns 200", func(t *testing.T) {
 		radikoSvc := &stubRadikoService{}
 		searchSvc := &stubSearchService{}
-		h := NewBroadcastHandler(radikoSvc, searchSvc)
+		h := NewBroadcastHandler(radikoSvc, searchSvc, &stubBroadcastProgramRepo{})
 
 		req := httptest.NewRequest(http.MethodGet, "/search?keyword=jazz", nil)
 		rr := httptest.NewRecorder()
@@ -132,7 +157,7 @@ func TestBroadcastHandlerSearch(t *testing.T) {
 	t.Run("cast param calls SearchForAPI", func(t *testing.T) {
 		radikoSvc := &stubRadikoService{}
 		searchSvc := &stubSearchService{}
-		h := NewBroadcastHandler(radikoSvc, searchSvc)
+		h := NewBroadcastHandler(radikoSvc, searchSvc, &stubBroadcastProgramRepo{})
 
 		req := httptest.NewRequest(http.MethodGet, "/search?cast=SomePerson", nil)
 		rr := httptest.NewRecorder()
@@ -158,7 +183,7 @@ func TestBroadcastHandlerSearch(t *testing.T) {
 				}, nil
 			},
 		}
-		h := NewBroadcastHandler(radikoSvc, searchSvc)
+		h := NewBroadcastHandler(radikoSvc, searchSvc, &stubBroadcastProgramRepo{})
 
 		req := httptest.NewRequest(http.MethodGet, "/search?keyword=jazz", nil)
 		rr := httptest.NewRecorder()
@@ -188,7 +213,7 @@ func TestBroadcastHandlerSearch(t *testing.T) {
 				return nil, errSearchFailed
 			},
 		}
-		h := NewBroadcastHandler(radikoSvc, searchSvc)
+		h := NewBroadcastHandler(radikoSvc, searchSvc, &stubBroadcastProgramRepo{})
 
 		req := httptest.NewRequest(http.MethodGet, "/search?keyword=error", nil)
 		rr := httptest.NewRecorder()
@@ -214,7 +239,7 @@ func TestBroadcastHandler_GetCurrentSchedule(t *testing.T) {
 				return []map[string]interface{}{{"station_id": "TBS", "title": "jazz"}}, nil
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		req := httptest.NewRequest(http.MethodGet, "/schedule", nil)
 		rr := httptest.NewRecorder()
 		h.GetCurrentSchedule(rr, req)
@@ -228,7 +253,7 @@ func TestBroadcastHandler_GetCurrentSchedule(t *testing.T) {
 				return nil, errors.New("fetch error")
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		req := httptest.NewRequest(http.MethodGet, "/schedule", nil)
 		rr := httptest.NewRecorder()
 		h.GetCurrentSchedule(rr, req)
@@ -245,7 +270,7 @@ func TestBroadcastHandler_GetWeeklySchedule(t *testing.T) {
 				return []map[string]interface{}{{"broadcast_name": "TBSラジオ", "entries": []map[string]interface{}{}}}, nil
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		r := chi.NewRouter()
 		r.Get("/schedule/{station_id}", h.GetWeeklySchedule)
 		req := httptest.NewRequest(http.MethodGet, "/schedule/TBS", nil)
@@ -261,7 +286,7 @@ func TestBroadcastHandler_GetWeeklySchedule(t *testing.T) {
 				return nil, errors.New("fetch error")
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		r := chi.NewRouter()
 		r.Get("/schedule/{station_id}", h.GetWeeklySchedule)
 		req := httptest.NewRequest(http.MethodGet, "/schedule/TBS", nil)
@@ -280,7 +305,7 @@ func TestBroadcastHandler_ShowProgramDetail(t *testing.T) {
 				return map[string]interface{}{"title": title, "station_id": stationID}, nil
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		r := chi.NewRouter()
 		r.Get("/list/{station_id}/{title}", h.ShowProgramDetail)
 		req := httptest.NewRequest(http.MethodGet, "/list/TBS/jazz+show", nil)
@@ -296,7 +321,7 @@ func TestBroadcastHandler_ShowProgramDetail(t *testing.T) {
 				return nil, errors.New("fetch error")
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		r := chi.NewRouter()
 		r.Get("/list/{station_id}/{title}", h.ShowProgramDetail)
 		req := httptest.NewRequest(http.MethodGet, "/list/TBS/jazz+show", nil)
@@ -315,7 +340,7 @@ func TestBroadcastHandler_GetTwoWeekScheduleByStation(t *testing.T) {
 				return []map[string]interface{}{{"broadcast_name": "TBSラジオ", "entries": []map[string]interface{}{}}}, nil
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		r := chi.NewRouter()
 		r.Get("/timefree/{station_id}", h.GetTwoWeekScheduleByStation)
 		req := httptest.NewRequest(http.MethodGet, "/timefree/TBS", nil)
@@ -335,7 +360,7 @@ func TestBroadcastHandler_GetTwoWeekScheduleByStation(t *testing.T) {
 				return []map[string]interface{}{{"broadcast_name": "TBSラジオ", "entries": entries}}, nil
 			},
 		}
-		h := NewBroadcastHandler(svc, &stubSearchService{})
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
 		r := chi.NewRouter()
 		r.Get("/timefree/{station_id}", h.GetTwoWeekScheduleByStation)
 		req := httptest.NewRequest(http.MethodGet, "/timefree/TBS", nil)
@@ -349,7 +374,7 @@ func TestBroadcastHandler_GetTwoWeekScheduleByStation(t *testing.T) {
 
 func TestBroadcastHandler_GetTwoWeekScheduleSelect(t *testing.T) {
 	// fetchStationListForHandler は実際の Radiko API を呼ぶが、エラー時でも 200 を返す
-	h := NewBroadcastHandler(&stubRadikoService{}, &stubSearchService{})
+	h := NewBroadcastHandler(&stubRadikoService{}, &stubSearchService{}, &stubBroadcastProgramRepo{})
 	req := httptest.NewRequest(http.MethodGet, "/timefree?area=JP13", nil)
 	rr := httptest.NewRecorder()
 	h.GetTwoWeekScheduleSelect(rr, req)
@@ -361,7 +386,7 @@ func TestBroadcastHandler_GetTwoWeekScheduleSelect(t *testing.T) {
 
 func TestBroadcastHandler_GetTwoWeekScheduleSelect_DefaultArea(t *testing.T) {
 	// area パラメータなし → JP13 がデフォルト
-	h := NewBroadcastHandler(&stubRadikoService{}, &stubSearchService{})
+	h := NewBroadcastHandler(&stubRadikoService{}, &stubSearchService{}, &stubBroadcastProgramRepo{})
 	req := httptest.NewRequest(http.MethodGet, "/timefree", nil)
 	rr := httptest.NewRecorder()
 	h.GetTwoWeekScheduleSelect(rr, req)

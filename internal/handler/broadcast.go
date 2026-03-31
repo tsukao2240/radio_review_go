@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yourname/radio_review_go/internal/repository"
 	"github.com/yourname/radio_review_go/internal/service"
 )
 
@@ -35,16 +37,19 @@ func fetchXMLHandler(url string, v interface{}) error {
 type BroadcastHandler struct {
 	radikoService service.RadikoApiServiceInterface
 	searchService service.RadioProgramSearchServiceInterface
+	programRepo   repository.RadioProgramRepositoryInterface
 }
 
 // NewBroadcastHandler はコンストラクタ
 func NewBroadcastHandler(
 	radikoService service.RadikoApiServiceInterface,
 	searchService service.RadioProgramSearchServiceInterface,
+	programRepo repository.RadioProgramRepositoryInterface,
 ) *BroadcastHandler {
 	return &BroadcastHandler{
 		radikoService: radikoService,
 		searchService: searchService,
+		programRepo:   programRepo,
 	}
 }
 
@@ -198,11 +203,65 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// DBから program_id を取得（レビュー投稿ボタン用）
+	var programID int64
+	if prog, dbErr := h.programRepo.FindByStationAndTitle(stationID, title); dbErr == nil && prog != nil {
+		programID = prog.ID
+	}
+
+	// タイムフリー判定: 2週間分の番組表から放送終了済みかつ7日以内の直近放送を探す
+	latestBroadcast := findLatestTimefree(h.radikoService, stationID, title)
+
 	data := map[string]interface{}{
 		"Entries":         []map[string]interface{}{detail},
-		"LatestBroadcast": detail["date"],
+		"LatestBroadcast": latestBroadcast,
+		"ProgramID":       programID,
+		"StationID":       stationID,
+		"ProgramTitle":    title,
 	}
 	renderTemplate(w, r, "web/templates/radioprogram/detail.html", data)
+}
+
+// findLatestTimefree は2週間番組表からタイムフリー再生可能な直近放送を返す。
+// 放送終了済み（過去）かつ7日以内のものを対象とし、最新のものを返す。
+func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title string) map[string]interface{} {
+	schedule, err := svc.GetTwoWeekSchedule(stationID)
+	if err != nil || len(schedule) == 0 {
+		log.Printf("findLatestTimefree: GetTwoWeekSchedule error: %v", err)
+		return nil
+	}
+
+	entries, _ := schedule[0]["entries"].([]map[string]interface{})
+	now := time.Now()
+	timefreeLimitDate := now.AddDate(0, 0, -7)
+
+	var latestBroadcast map[string]interface{}
+	var latestEndTime time.Time
+
+	for _, entry := range entries {
+		if entry["title"] != title {
+			continue
+		}
+		// "to" は "20260321050000" 形式
+		toStr, _ := entry["to"].(string)
+		if len(toStr) < 12 {
+			continue
+		}
+		programEndTime, err := time.ParseInLocation("20060102150405", toStr, time.Local)
+		if err != nil {
+			continue
+		}
+		// 放送終了済み かつ 7日以内
+		if !programEndTime.Before(now) || !programEndTime.After(timefreeLimitDate) {
+			continue
+		}
+		if latestBroadcast == nil || programEndTime.After(latestEndTime) {
+			latestBroadcast = entry
+			latestEndTime = programEndTime
+		}
+	}
+
+	return latestBroadcast
 }
 
 // Search は番組検索を行う

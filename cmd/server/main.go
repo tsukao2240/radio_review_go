@@ -100,7 +100,7 @@ func main() {
 
 	// --- Handlers ---
 	authHandler := handler.NewAuthHandler(userRepo, store)
-	broadcastHandler := handler.NewBroadcastHandler(radikoSvc, searchSvc)
+	broadcastHandler := handler.NewBroadcastHandler(radikoSvc, searchSvc, programRepo)
 	postHandler := handler.NewPostHandler(postSvc, interactionSvc, store)
 	mypageHandler := handler.NewMypageHandler(postSvc, store)
 	favHandler := handler.NewFavoriteHandler(favSvc, store)
