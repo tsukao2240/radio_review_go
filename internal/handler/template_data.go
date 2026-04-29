@@ -4,12 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"time"
 
 	"github.com/gorilla/sessions"
 	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
@@ -90,6 +92,7 @@ func RenderWithBase(w http.ResponseWriter, r *http.Request, tmplPath string, dat
 	}
 
 	htmlTagRe := regexp.MustCompile(`<[^>]+>`)
+	weekdays := [...]string{"日", "月", "火", "水", "木", "金", "土"}
 	funcMap := template.FuncMap{
 		// urlpathesc は URL パスセグメントとして安全にエスケープする（# → %23 など）。
 		// template.URL を返すことでテンプレートエンジンの二重エスケープを防ぐ。
@@ -99,6 +102,14 @@ func RenderWithBase(w http.ResponseWriter, r *http.Request, tmplPath string, dat
 			brRe := regexp.MustCompile(`(?i)<br\s*/?>`)
 			s = brRe.ReplaceAllString(s, "\n")
 			return htmlTagRe.ReplaceAllString(s, "")
+		},
+		// fmtdate は "20060102" 形式の文字列を "2006/01/02 (月)" 形式に変換する。
+		"fmtdate": func(s string) string {
+			t, err := time.Parse("20060102", s)
+			if err != nil {
+				return s
+			}
+			return fmt.Sprintf("%d/%02d/%02d (%s)", t.Year(), t.Month(), t.Day(), weekdays[t.Weekday()])
 		},
 	}
 	t, err := template.New("").Funcs(funcMap).ParseFiles(baseTmpl, tmplPath)

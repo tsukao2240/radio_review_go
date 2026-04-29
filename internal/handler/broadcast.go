@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -167,7 +168,20 @@ func (h *BroadcastHandler) GetTwoWeekScheduleByStation(w http.ResponseWriter, r 
 	if len(schedule) > 0 {
 		item := schedule[0]
 		data["BroadcastName"] = item["broadcast_name"]
-		entries, _ := item["entries"].([]map[string]interface{})
+
+		// Redis から JSON 経由で返る場合は []interface{} になるため両方に対応する
+		var entries []map[string]interface{}
+		switch v := item["entries"].(type) {
+		case []map[string]interface{}:
+			entries = v
+		case []interface{}:
+			for _, raw := range v {
+				if m, ok := raw.(map[string]interface{}); ok {
+					entries = append(entries, m)
+				}
+			}
+		}
+
 		data["Entries"] = entries
 		// 日付一覧を entries から収集
 		dateSet := map[string]struct{}{}
@@ -180,6 +194,7 @@ func (h *BroadcastHandler) GetTwoWeekScheduleByStation(w http.ResponseWriter, r 
 		for d := range dateSet {
 			dates = append(dates, d)
 		}
+		sort.Strings(dates)
 		data["Dates"] = dates
 	}
 	renderTemplate(w, r, "web/templates/radioprogram/twoweek_schedule.html", data)
