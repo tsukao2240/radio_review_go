@@ -46,12 +46,19 @@
   {{ end }}
 
   <!-- お気に入りボタン -->
+  {{ if $.User }}
   <button id="favorite-btn"
           class="w-full mb-4 py-2 rounded-lg border-2 border-red-400 text-red-500 dark:text-red-400 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition"
           data-station-id="{{ index . "id" }}"
           data-title="{{ index . "title" }}">
     <i class="fas fa-heart mr-1"></i> お気に入りに追加
   </button>
+  {{ else }}
+  <a href="/login"
+     class="block w-full mb-4 py-2 rounded-lg border-2 border-red-400 text-red-500 dark:text-red-400 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition text-center">
+    <i class="fas fa-heart mr-1"></i> お気に入りに追加（ログインが必要）
+  </a>
+  {{ end }}
 
   <!-- タイムフリー録音 -->
   {{ if $latestBroadcast }}
@@ -110,7 +117,7 @@
 <script nonce="{{ $.Nonce }}">
 (function() {
   var btn = document.getElementById('favorite-btn');
-  if (!btn) return;
+  if (!btn) return; // 未ログイン時はボタンが存在しないためここで終了
 
   var stationId = btn.dataset.stationId;
   var programTitle = btn.dataset.title;
