@@ -103,7 +103,7 @@ func main() {
 	broadcastHandler := handler.NewBroadcastHandler(radikoSvc, searchSvc, programRepo)
 	postHandler := handler.NewPostHandler(postSvc, interactionSvc, store)
 	mypageHandler := handler.NewMypageHandler(postSvc, store)
-	favHandler := handler.NewFavoriteHandler(favSvc, store)
+	favHandler := handler.NewFavoriteHandler(favSvc, radikoSvc, store)
 	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)

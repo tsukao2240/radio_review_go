@@ -52,7 +52,7 @@
             {{ if eq (index . "date") $date }}
             <div class="card-base">
                 <h3 class="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                    <a href="/list/{{ index . "station_id" }}/{{ urlpathesc (index . "title") }}"
+                    <a href="/list/{{ index . "station_id" }}/{{ urlpathesc (index . "title") }}?date={{ index . "date" }}"
                        class="hover:underline hover:text-primary-600 transition">
                         {{ index . "title" }}
                     </a>

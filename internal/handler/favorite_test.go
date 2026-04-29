@@ -59,7 +59,7 @@ func withUserID(r *http.Request, userID int64) *http.Request {
 func TestFavoriteHandler_Store(t *testing.T) {
 	t.Run("正常追加: 200", func(t *testing.T) {
 		svc := &stubFavService{}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 
 		body, _ := json.Marshal(map[string]interface{}{
 			"station_id":    "TBS",
@@ -76,7 +76,7 @@ func TestFavoriteHandler_Store(t *testing.T) {
 	})
 
 	t.Run("station_id 未指定: 422", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"program_title": "jazz"})
 		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites", bytes.NewReader(body)), 1)
 		rr := httptest.NewRecorder()
@@ -87,7 +87,7 @@ func TestFavoriteHandler_Store(t *testing.T) {
 	})
 
 	t.Run("未認証: 401", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
 		req := httptest.NewRequest(http.MethodPost, "/favorites", bytes.NewReader(body))
 		rr := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestFavoriteHandler_Store(t *testing.T) {
 				return nil, errors.New("db error")
 			},
 		}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
 		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites", bytes.NewReader(body)), 1)
 		rr := httptest.NewRecorder()
@@ -116,7 +116,7 @@ func TestFavoriteHandler_Store(t *testing.T) {
 
 func TestFavoriteHandler_Destroy(t *testing.T) {
 	t.Run("正常削除: 200", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
 		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/delete", bytes.NewReader(body)), 1)
 		rr := httptest.NewRecorder()
@@ -127,7 +127,7 @@ func TestFavoriteHandler_Destroy(t *testing.T) {
 	})
 
 	t.Run("station_id 未指定: 422", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"program_title": "jazz"})
 		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/delete", bytes.NewReader(body)), 1)
 		rr := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestFavoriteHandler_Destroy(t *testing.T) {
 	})
 
 	t.Run("未認証: 401", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
 		req := httptest.NewRequest(http.MethodPost, "/favorites/delete", bytes.NewReader(body))
 		rr := httptest.NewRecorder()
@@ -149,7 +149,7 @@ func TestFavoriteHandler_Destroy(t *testing.T) {
 	})
 
 	t.Run("不正なJSON: 400", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/delete", strings.NewReader("bad-json")), 1)
 		rr := httptest.NewRecorder()
 		h.Destroy(rr, req)
@@ -164,7 +164,7 @@ func TestFavoriteHandler_Destroy(t *testing.T) {
 				return errors.New("db error")
 			},
 		}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 		body, _ := json.Marshal(map[string]interface{}{"station_id": "TBS", "program_title": "jazz"})
 		req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/delete", bytes.NewReader(body)), 1)
 		rr := httptest.NewRecorder()
@@ -180,7 +180,7 @@ func TestFavoriteHandler_Check(t *testing.T) {
 		svc := &stubFavService{
 			checkFunc: func(_ int64, _, _ string, _ *int) (bool, error) { return true, nil },
 		}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites/check?station_id=TBS&program_title=jazz", nil), 1)
 		rr := httptest.NewRecorder()
 		h.Check(rr, req)
@@ -198,7 +198,7 @@ func TestFavoriteHandler_Check(t *testing.T) {
 	})
 
 	t.Run("パラメータ不足: 400", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites/check?station_id=TBS", nil), 1)
 		rr := httptest.NewRecorder()
 		h.Check(rr, req)
@@ -213,7 +213,7 @@ func TestFavoriteHandler_Check(t *testing.T) {
 				return false, errors.New("db error")
 			},
 		}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites/check?station_id=TBS&program_title=jazz", nil), 1)
 		rr := httptest.NewRecorder()
 		h.Check(rr, req)
@@ -223,7 +223,7 @@ func TestFavoriteHandler_Check(t *testing.T) {
 	})
 
 	t.Run("未認証: is_favorite=false", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		req := httptest.NewRequest(http.MethodGet, "/favorites/check?station_id=TBS&program_title=jazz", nil)
 		rr := httptest.NewRecorder()
 		h.Check(rr, req)
@@ -240,7 +240,7 @@ func TestFavoriteHandler_Check(t *testing.T) {
 
 func TestFavoriteHandler_Index(t *testing.T) {
 	t.Run("未認証: /loginにリダイレクト", func(t *testing.T) {
-		h := NewFavoriteHandler(&stubFavService{}, nil)
+		h := NewFavoriteHandler(&stubFavService{}, nil, nil)
 		req := httptest.NewRequest(http.MethodGet, "/favorites", nil)
 		rr := httptest.NewRecorder()
 		h.Index(rr, req)
@@ -257,7 +257,7 @@ func TestFavoriteHandler_Index(t *testing.T) {
 				return []model.FavoriteProgram{{ID: 1}}, nil
 			},
 		}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
 		rr := httptest.NewRecorder()
 		h.Index(rr, req)
@@ -271,7 +271,7 @@ func TestFavoriteHandler_Index(t *testing.T) {
 				return nil, errors.New("db error")
 			},
 		}
-		h := NewFavoriteHandler(svc, nil)
+		h := NewFavoriteHandler(svc, nil, nil)
 		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
 		rr := httptest.NewRecorder()
 		h.Index(rr, req)

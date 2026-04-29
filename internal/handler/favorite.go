@@ -12,15 +12,17 @@ import (
 
 // FavoriteHandler はお気に入り番組関連の HTTP ハンドラーを管理する。
 type FavoriteHandler struct {
-	favService service.FavoriteServiceInterface
-	store      sessions.Store
+	favService   service.FavoriteServiceInterface
+	radikoService service.RadikoApiServiceInterface
+	store        sessions.Store
 }
 
 // NewFavoriteHandler は新しい FavoriteHandler を返す。
-func NewFavoriteHandler(favService service.FavoriteServiceInterface, store sessions.Store) *FavoriteHandler {
+func NewFavoriteHandler(favService service.FavoriteServiceInterface, radikoService service.RadikoApiServiceInterface, store sessions.Store) *FavoriteHandler {
 	return &FavoriteHandler{
-		favService: favService,
-		store:      store,
+		favService:   favService,
+		radikoService: radikoService,
+		store:        store,
 	}
 }
 
@@ -38,8 +40,46 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 各お気に入りに次回放送のキャスト・日付を付与
+	type favWithCast struct {
+		ID           int64
+		StationID    string
+		ProgramTitle string
+		BroadcastDay interface{}
+		CreatedAt    interface{}
+		Cast         string
+		NextDate     string
+	}
+	favsWithCast := make([]favWithCast, 0, len(favs))
+	for _, f := range favs {
+		cast := ""
+		nextDate := ""
+		if h.radikoService != nil {
+			// 次回放送のキャスト・日付を優先、なければ直近タイムフリー放送を使用
+			if next := findNextBroadcast(h.radikoService, f.StationID, f.ProgramTitle, f.BroadcastDay); next != nil {
+				cast, _ = next["cast"].(string)
+				nextDate, _ = next["date"].(string)
+			}
+			if cast == "" {
+				if latest := findLatestTimefree(h.radikoService, f.StationID, f.ProgramTitle); latest != nil {
+					cast, _ = latest["cast"].(string)
+					nextDate, _ = latest["date"].(string)
+				}
+			}
+		}
+		favsWithCast = append(favsWithCast, favWithCast{
+			ID:           f.ID,
+			StationID:    f.StationID,
+			ProgramTitle: f.ProgramTitle,
+			BroadcastDay: f.BroadcastDay,
+			CreatedAt:    f.CreatedAt,
+			Cast:         cast,
+			NextDate:     nextDate,
+		})
+	}
+
 	renderOrJSON(w, r, "web/templates/favorite/index.html", map[string]interface{}{
-		"Favorites": favs,
+		"Favorites": favsWithCast,
 	})
 }
 

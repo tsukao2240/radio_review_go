@@ -1,0 +1,66 @@
+services:
+  # Go App
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: radio_review_go_app
+    restart: always
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - radio_review_go_network
+
+  # MySQL (Database)
+  db:
+    image: mysql:8.0
+    container_name: radio_review_go_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: radio_review
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: password
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - radio_review_go_network
+
+  # Redis (Cache/Session)
+  redis:
+    image: redis:alpine
+    container_name: radio_review_go_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - radio_review_go_network
+
+networks:
+  radio_review_go_network:
+    driver: bridge
+
+volumes:
+  db_data:

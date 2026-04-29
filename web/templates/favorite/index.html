@@ -23,7 +23,7 @@
     <div class="card-base">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
-          <a href="/list/{{ .StationID }}/{{ urlpathesc .ProgramTitle }}"
+          <a href="/list/{{ .StationID }}/{{ urlpathesc .ProgramTitle }}{{ if .NextDate }}?date={{ .NextDate }}{{ end }}"
              class="text-base font-semibold text-primary-600 dark:text-primary-400 hover:underline block truncate">
             {{ .ProgramTitle }}
           </a>
@@ -34,12 +34,17 @@
             {{ end }}
             <span class="text-xs text-gray-500 dark:text-gray-400">{{ .StationID }}</span>
           </div>
+          {{ if .Cast }}
+          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <i class="fas fa-microphone mr-1"></i>{{ .Cast }}
+          </p>
+          {{ end }}
           <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
             <i class="far fa-clock mr-1"></i>登録日時: {{ .CreatedAt.Format "2006年01月02日 15:04" }}
           </p>
         </div>
         <button class="delete-favorite-btn flex-shrink-0 text-sm px-3 py-1 border border-red-300 dark:border-red-700 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-                data-favorite-id="{{ .ID }}"
+                data-station-id="{{ .StationID }}"
                 data-program-title="{{ .ProgramTitle }}">
           <i class="fas fa-trash mr-1"></i>削除
         </button>
@@ -75,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.querySelectorAll('.delete-favorite-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
-            const favoriteId = this.dataset.favoriteId;
+            const stationId = this.dataset.stationId;
             const programTitle = this.dataset.programTitle;
 
             if (!confirm(programTitle + ' をお気に入りから削除しますか？')) {
@@ -88,7 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({ id: parseInt(favoriteId) })
+                body: JSON.stringify({ station_id: stationId, program_title: programTitle })
             })
             .then(function(response) { return response.json(); })
             .then(function(data) {

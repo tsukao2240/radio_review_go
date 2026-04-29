@@ -7,6 +7,7 @@
 {{ $programID := index . "ProgramID" }}
 {{ $stationID := index . "StationID" }}
 {{ $programTitle := index . "ProgramTitle" }}
+{{ $dateParam := index . "DateParam" }}
 
 {{ if $entries }}
 {{ range $entries }}
@@ -50,7 +51,8 @@
   <button id="favorite-btn"
           class="w-full mb-4 py-2 rounded-lg border-2 border-red-400 text-red-500 dark:text-red-400 font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition"
           data-station-id="{{ index . "id" }}"
-          data-title="{{ index . "title" }}">
+          data-title="{{ index . "title" }}"
+          data-date="{{ $dateParam }}">
     <i class="fas fa-heart mr-1"></i> お気に入りに追加
   </button>
   {{ else }}
@@ -121,6 +123,17 @@
 
   var stationId = btn.dataset.stationId;
   var programTitle = btn.dataset.title;
+  var dateStr = btn.dataset.date || '';
+  // dateStr が "20060102" 形式の場合、曜日（0=月〜6=日）を算出
+  function broadcastDayFromDate(s) {
+    if (!s || s.length < 8) return null;
+    var d = new Date(
+      parseInt(s.substr(0,4)),
+      parseInt(s.substr(4,2)) - 1,
+      parseInt(s.substr(6,2))
+    );
+    return isNaN(d.getTime()) ? null : (d.getDay() + 6) % 7;
+  }
 
   function setFavorited(isFav) {
     if (isFav) {
@@ -141,10 +154,13 @@
     var isFav = btn.className.indexOf('bg-red-500') !== -1;
     var url = isFav ? '/favorites/delete' : '/favorites';
     btn.disabled = true;
+    var payload = { station_id: stationId, program_title: programTitle };
+    var bd = broadcastDayFromDate(dateStr);
+    if (bd !== null) payload.broadcast_day = bd;
     fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ station_id: stationId, program_title: programTitle })
+      body: JSON.stringify(payload)
     })
     .then(function(r) {
       if (r.status === 401) { window.location.href = '/login'; return; }

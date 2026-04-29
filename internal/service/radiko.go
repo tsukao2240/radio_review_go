@@ -346,6 +346,7 @@ func (s *RadikoApiService) GetCurrentPrograms() ([]map[string]interface{}, error
 			startTime := ""
 			endTime := ""
 			progURL := ""
+			progDate := ""
 			if len(st.Progs) > 0 {
 				p := st.Progs[0]
 				title = p.Title
@@ -353,6 +354,9 @@ func (s *RadikoApiService) GetCurrentPrograms() ([]map[string]interface{}, error
 				startTime = insertColon(p.Ftl)
 				endTime = insertColon(p.Tol)
 				progURL = p.URL
+				if len(p.Ft) >= 8 {
+					progDate = p.Ft[:8]
+				}
 			}
 
 			allEntries = append(allEntries, map[string]interface{}{
@@ -360,6 +364,7 @@ func (s *RadikoApiService) GetCurrentPrograms() ([]map[string]interface{}, error
 				"station":    st.Name,
 				"title":      title,
 				"cast":       cast,
+				"date":       progDate,
 				"start":      startTime,
 				"end":        endTime,
 				"url":        progURL,

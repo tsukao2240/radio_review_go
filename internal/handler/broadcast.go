@@ -224,8 +224,25 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 		programID = prog.ID
 	}
 
-	// タイムフリー判定: 2週間分の番組表から放送終了済みかつ7日以内の直近放送を探す
-	latestBroadcast := findLatestTimefree(h.radikoService, stationID, title)
+	// dateParam がある場合: その日のエントリを基準に
+	//   - cast・image・desc を上書き
+	//   - 同じキャストの直近タイムフリー対象放送を録音ボタン用に使う
+	// dateParam がない場合: 直近タイムフリー対象放送を使う
+	dateParam := r.URL.Query().Get("date")
+	var latestBroadcast map[string]interface{}
+	if dateParam != "" {
+		if entry := entryForDate(h.radikoService, stationID, title, dateParam); entry != nil {
+			overwriteDetailFromEntry(detail, entry)
+			cast, _ := entry["cast"].(string)
+			latestBroadcast = findLatestTimefreeWithCast(h.radikoService, stationID, title, cast)
+		}
+	}
+	if latestBroadcast == nil {
+		latestBroadcast = findLatestTimefree(h.radikoService, stationID, title)
+		if latestBroadcast != nil {
+			overwriteDetailFromEntry(detail, latestBroadcast)
+		}
+	}
 
 	data := map[string]interface{}{
 		"Entries":         []map[string]interface{}{detail},
@@ -233,6 +250,7 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 		"ProgramID":       programID,
 		"StationID":       stationID,
 		"ProgramTitle":    title,
+		"DateParam":       dateParam,
 	}
 	renderTemplate(w, r, "web/templates/radioprogram/detail.html", data)
 }
@@ -246,7 +264,17 @@ func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title 
 		return nil
 	}
 
-	entries, _ := schedule[0]["entries"].([]map[string]interface{})
+	var entries []map[string]interface{}
+	switch v := schedule[0]["entries"].(type) {
+	case []map[string]interface{}:
+		entries = v
+	case []interface{}:
+		for _, raw := range v {
+			if m, ok := raw.(map[string]interface{}); ok {
+				entries = append(entries, m)
+			}
+		}
+	}
 	now := time.Now()
 	timefreeLimitDate := now.AddDate(0, 0, -7)
 
@@ -277,6 +305,156 @@ func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title 
 	}
 
 	return latestBroadcast
+}
+
+// entryForDate は指定日付・タイトルに一致する2週間番組表のエントリを返す。
+func entryForDate(svc service.RadikoApiServiceInterface, stationID, title, date string) map[string]interface{} {
+	schedule, err := svc.GetTwoWeekSchedule(stationID)
+	if err != nil || len(schedule) == 0 {
+		return nil
+	}
+	var entries []map[string]interface{}
+	switch v := schedule[0]["entries"].(type) {
+	case []map[string]interface{}:
+		entries = v
+	case []interface{}:
+		for _, raw := range v {
+			if m, ok := raw.(map[string]interface{}); ok {
+				entries = append(entries, m)
+			}
+		}
+	}
+	for _, e := range entries {
+		if e["title"] == title && e["date"] == date {
+			log.Printf("entryForDate: found station=%s title=%s date=%s cast=%q", stationID, title, date, e["cast"])
+			return e
+		}
+	}
+	log.Printf("entryForDate: no entry found for station=%s title=%s date=%s", stationID, title, date)
+	return nil
+}
+
+// findLatestTimefreeWithCast は指定キャストと一致する直近タイムフリー対象放送を返す。
+// 一致するものがなければキャスト不問で findLatestTimefree と同等の結果を返す。
+func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID, title, cast string) map[string]interface{} {
+	schedule, err := svc.GetTwoWeekSchedule(stationID)
+	if err != nil || len(schedule) == 0 {
+		return nil
+	}
+	var entries []map[string]interface{}
+	switch v := schedule[0]["entries"].(type) {
+	case []map[string]interface{}:
+		entries = v
+	case []interface{}:
+		for _, raw := range v {
+			if m, ok := raw.(map[string]interface{}); ok {
+				entries = append(entries, m)
+			}
+		}
+	}
+	now := time.Now()
+	limit := now.AddDate(0, 0, -7)
+	var best map[string]interface{}
+	var bestTime time.Time
+	for _, e := range entries {
+		if e["title"] != title {
+			continue
+		}
+		if cast != "" {
+			if c, _ := e["cast"].(string); c != cast {
+				continue
+			}
+		}
+		toStr, _ := e["to"].(string)
+		if len(toStr) < 12 {
+			continue
+		}
+		t, err := time.ParseInLocation("20060102150405", toStr, time.Local)
+		if err != nil || !t.Before(now) || !t.After(limit) {
+			continue
+		}
+		if best == nil || t.After(bestTime) {
+			best = e
+			bestTime = t
+		}
+	}
+	return best
+}
+
+// isTimefreeEligible はエントリが放送終了済みかつ7日以内かを返す。
+func isTimefreeEligible(entry map[string]interface{}) bool {
+	toStr, _ := entry["to"].(string)
+	if len(toStr) < 12 {
+		return false
+	}
+	programEndTime, err := time.ParseInLocation("20060102150405", toStr, time.Local)
+	if err != nil {
+		return false
+	}
+	now := time.Now()
+	return programEndTime.Before(now) && programEndTime.After(now.AddDate(0, 0, -7))
+}
+
+// overwriteDetailFromEntry は日付別エントリの cast・image・desc で detail を上書きする。
+// info は2週間番組表に含まれないため GetProgramDetails の値を維持する。
+// findNextBroadcast は次回放送（未来）のエントリを返す。
+// broadcastDay が nil でない場合は指定曜日（0=月〜6=日）のみを対象にする。
+func findNextBroadcast(svc service.RadikoApiServiceInterface, stationID, title string, broadcastDay *int) map[string]interface{} {
+	schedule, err := svc.GetTwoWeekSchedule(stationID)
+	if err != nil || len(schedule) == 0 {
+		return nil
+	}
+	var entries []map[string]interface{}
+	switch v := schedule[0]["entries"].(type) {
+	case []map[string]interface{}:
+		entries = v
+	case []interface{}:
+		for _, raw := range v {
+			if m, ok := raw.(map[string]interface{}); ok {
+				entries = append(entries, m)
+			}
+		}
+	}
+	now := time.Now()
+	var next map[string]interface{}
+	var nextTime time.Time
+	for _, e := range entries {
+		if e["title"] != title {
+			continue
+		}
+		ftStr, _ := e["ft"].(string)
+		if len(ftStr) < 12 {
+			continue
+		}
+		t, err := time.ParseInLocation("20060102150405", ftStr, time.Local)
+		if err != nil || !t.After(now) {
+			continue
+		}
+		if broadcastDay != nil {
+			// 曜日フィルタ: 0=月〜6=日
+			wd := (int(t.Weekday()) + 6) % 7
+			if wd != *broadcastDay {
+				continue
+			}
+		}
+		if next == nil || t.Before(nextTime) {
+			next = e
+			nextTime = t
+		}
+	}
+	return next
+}
+
+func overwriteDetailFromEntry(detail, entry map[string]interface{}) {
+	if cast, ok := entry["cast"].(string); ok && cast != "" {
+		detail["cast"] = cast
+	}
+	if img, ok := entry["img"].(string); ok && img != "" {
+		detail["image"] = img
+	}
+	if desc, ok := entry["desc"].(string); ok && desc != "" {
+		detail["desc"] = desc
+	}
 }
 
 // Search は番組検索を行う
