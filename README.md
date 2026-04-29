@@ -5,9 +5,9 @@ PHP/Laravel版（`../radio_review/`）をGoで書き直したもの。
 
 ## スクリーンショット
 
-| 番組表（未ログイン） | 番組表（ログイン済み） |
+| 放送中の番組 | 2週間番組表（タイムフリー） |
 |---|---|
-| ![番組表](schedule.png) | ![番組表ログイン](schedule_loggedin.png) |
+| ![放送中の番組](screenshot_schedule.png) | ![2週間番組表](screenshot_twoweek.png) |
 
 ## 主な機能
 
