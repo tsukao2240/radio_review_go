@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/yourname/radio_review_go/internal/model"
 	"github.com/yourname/radio_review_go/internal/repository"
 )
 
@@ -209,89 +210,62 @@ func cleanTitle(title string) []string {
 // findSimilarPrograms はキーワードに類似する番組を検索して平均評価順に返す。
 func (s *RecommendationService) findSimilarPrograms(keywords []string) ([]map[string]interface{}, error) {
 	seen := make(map[int64]bool)
-	type programEntry struct {
-		id        int64
-		title     string
-		stationID string
-		cast      string
-		avgRating float64
-		reviews   int
-	}
-	var entries []programEntry
+	var candidateIDs []int64
 
 	for _, kw := range keywords {
-		programs, err := s.programRepo.SearchByTitle(kw, recommendationLimit*2, 0)
+		programs, err := s.programRepo.SearchByTitle(kw, recommendationLimit*3, 0)
 		if err != nil {
 			log.Printf("RecommendationService.findSimilarPrograms SearchByTitle(%q): %v", kw, err)
 			continue
 		}
 		for _, prog := range programs {
-			if seen[prog.ID] {
-				continue
+			if !seen[prog.ID] {
+				seen[prog.ID] = true
+				candidateIDs = append(candidateIDs, prog.ID)
 			}
-			seen[prog.ID] = true
-
-			avgRating, err := s.postRepo.AverageRating(prog.ID)
-			if err != nil {
-				avgRating = 0
-			}
-			posts, err := s.postRepo.FindByProgram(prog.StationID, prog.Title, 100, 0)
-			reviewCount := 0
-			if err == nil {
-				reviewCount = len(posts)
-			}
-
-			entries = append(entries, programEntry{
-				id:        prog.ID,
-				title:     prog.Title,
-				stationID: prog.StationID,
-				cast:      prog.Cast,
-				avgRating: avgRating,
-				reviews:   reviewCount,
-			})
-		}
-		if len(seen) >= recommendationLimit {
-			break
 		}
 	}
 
-	// 平均評価降順、レビュー数降順でソート
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].avgRating != entries[j].avgRating {
-			return entries[i].avgRating > entries[j].avgRating
+	if len(candidateIDs) == 0 {
+		return nil, nil
+	}
+
+	summaries, err := s.programRepo.FindSummaryByIDs(candidateIDs)
+	if err != nil {
+		return nil, fmt.Errorf("findSimilarPrograms FindSummaryByIDs: %w", err)
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].AvgRating != summaries[j].AvgRating {
+			return summaries[i].AvgRating > summaries[j].AvgRating
 		}
-		return entries[i].reviews > entries[j].reviews
+		return summaries[i].ReviewsCount > summaries[j].ReviewsCount
 	})
-
-	if len(entries) > recommendationLimit {
-		entries = entries[:recommendationLimit]
-	}
 
 	// ステーション多様性: 各ステーション最大2件
 	stationCount := make(map[string]int)
-	diverse := entries[:0]
-	for _, e := range entries {
-		if stationCount[e.stationID] < 2 {
+	var diverse []model.ProgramSummary
+	for _, e := range summaries {
+		if stationCount[e.StationID] < 2 {
 			diverse = append(diverse, e)
-			stationCount[e.stationID]++
+			stationCount[e.StationID]++
 		}
 		if len(diverse) >= recommendationLimit {
 			break
 		}
 	}
-	entries = diverse
 
-	result := make([]map[string]interface{}, 0, len(entries))
-	for _, e := range entries {
+	result := make([]map[string]interface{}, 0, len(diverse))
+	for _, e := range diverse {
 		m := map[string]interface{}{
-			"id":            e.id,
-			"title":         e.title,
-			"station_id":    e.stationID,
-			"avg_rating":    fmt.Sprintf("%.1f", e.avgRating),
-			"reviews_count": e.reviews,
+			"id":            e.ID,
+			"title":         e.Title,
+			"station_id":    e.StationID,
+			"avg_rating":    fmt.Sprintf("%.1f", e.AvgRating),
+			"reviews_count": e.ReviewsCount,
 		}
-		if e.cast != "" {
-			m["cast"] = e.cast
+		if e.Cast != "" {
+			m["cast"] = e.Cast
 		}
 		result = append(result, m)
 	}

@@ -44,6 +44,7 @@ type RadioProgramRepositoryInterface interface {
 	// FindPopularSummary は minReviews 件以上のレビューを持つ番組を
 	// 平均評価降順で返す（JOIN集計、N+1を回避）。
 	FindPopularSummary(minReviews, limit int) ([]model.ProgramSummary, error)
+	FindSummaryByIDs(ids []int64) ([]model.ProgramSummary, error)
 	// FindTrendingSummary は cutoff 以降に評価4.0以上のレビューが1件以上ある
 	// 番組を最近の高評価数降順で返す（JOIN集計、N+1を回避）。
 	FindTrendingSummary(cutoff time.Time, limit int) ([]model.ProgramSummary, error)

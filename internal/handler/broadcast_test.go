@@ -39,6 +39,9 @@ func (s *stubBroadcastProgramRepo) Upsert(prog *model.RadioProgram) (int64, erro
 func (s *stubBroadcastProgramRepo) FindPopularSummary(minReviews, limit int) ([]model.ProgramSummary, error) {
 	return nil, nil
 }
+func (s *stubBroadcastProgramRepo) FindSummaryByIDs(ids []int64) ([]model.ProgramSummary, error) {
+	return nil, nil
+}
 func (s *stubBroadcastProgramRepo) FindTrendingSummary(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
 	return nil, nil
 }

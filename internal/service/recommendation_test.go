@@ -225,23 +225,15 @@ func TestFindSimilarPrograms(t *testing.T) {
 					{ID: 2, StationID: "LFR", Title: "ジャズ特集"},
 				}, nil
 			},
-		}
-		postRepo := &stubPostRepo{
-			avgRatingFunc: func(programID int64) (float64, error) {
-				if programID == 1 {
-					return 4.8, nil
-				}
-				return 3.5, nil
-			},
-			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
-				if programTitle == "ジャズナイト" {
-					return []model.Post{{ID: 1}, {ID: 2}}, nil
-				}
-				return []model.Post{{ID: 3}}, nil
+			findSummaryByIDsFunc: func(ids []int64) ([]model.ProgramSummary, error) {
+				return []model.ProgramSummary{
+					{ID: 1, StationID: "TBS", Title: "ジャズナイト", AvgRating: 4.8, ReviewsCount: 2},
+					{ID: 2, StationID: "LFR", Title: "ジャズ特集", AvgRating: 3.5, ReviewsCount: 1},
+				}, nil
 			},
 		}
 		svc := &RecommendationService{
-			postRepo:    postRepo,
+			postRepo:    &stubPostRepo{},
 			programRepo: programRepo,
 			favRepo:     &stubFavRepo{},
 			redis:       nil,
@@ -451,6 +443,11 @@ func TestRecommendationService_BuildRecommendations_WithKeywords(t *testing.T) {
 		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
 			return []model.RadioProgram{
 				{ID: 10, StationID: "TBS", Title: "ジャズ特集"},
+			}, nil
+		},
+		findSummaryByIDsFunc: func(ids []int64) ([]model.ProgramSummary, error) {
+			return []model.ProgramSummary{
+				{ID: 10, StationID: "TBS", Title: "ジャズ特集", AvgRating: 4.0, ReviewsCount: 1},
 			}, nil
 		},
 	}
