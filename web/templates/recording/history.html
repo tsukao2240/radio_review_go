@@ -38,7 +38,12 @@
       </div>
 
       {{ if eq .Status "completed" }}
-      <div class="recording-actions flex gap-2">
+      <div class="recording-actions flex gap-2 flex-wrap">
+        <button class="play-recording-btn inline-flex items-center text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                data-recording-id="{{ .RecordingID }}"
+                data-stream-url="/recording/stream?recording_id={{ .RecordingID }}">
+          <i class="fas fa-play mr-1"></i>再生
+        </button>
         <a href="/recording/download?recording_id={{ .RecordingID }}"
            class="inline-flex items-center text-sm px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition">
           <i class="fas fa-download mr-1"></i>ダウンロード
@@ -48,6 +53,12 @@
                 data-filename="{{ .ProgramName }}">
           <i class="fas fa-trash mr-1"></i>削除
         </button>
+      </div>
+      <div class="audio-player-container mt-3 hidden" id="player-{{ .RecordingID }}">
+        <audio controls class="w-full" preload="none">
+          <source src="/recording/stream?recording_id={{ .RecordingID }}" type="audio/aac">
+          お使いのブラウザはHTML5 audioに対応していません。
+        </audio>
       </div>
       {{ else if eq .Status "recording" }}
       <div class="text-sm text-gray-500 dark:text-gray-400">
@@ -155,6 +166,23 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(function(error) {
                 window.toast ? window.toast.error('エラーが発生しました: ' + error) : alert('エラーが発生しました: ' + error);
             });
+        });
+    });
+
+    // 再生ボタンの処理
+    document.querySelectorAll('.play-recording-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = btn.dataset.recordingId;
+            var container = document.getElementById('player-' + id);
+            if (container) {
+                container.classList.toggle('hidden');
+                if (!container.classList.contains('hidden')) {
+                    var audio = container.querySelector('audio');
+                    if (audio && audio.paused) {
+                        audio.play();
+                    }
+                }
+            }
         });
     });
 });

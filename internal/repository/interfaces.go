@@ -1,6 +1,10 @@
 package repository
 
-import "github.com/yourname/radio_review_go/internal/model"
+import (
+	"time"
+
+	"github.com/yourname/radio_review_go/internal/model"
+)
 
 // UserRepositoryInterface
 type UserRepositoryInterface interface {
@@ -37,6 +41,13 @@ type RadioProgramRepositoryInterface interface {
 	FindAll(limit, offset int) ([]model.RadioProgram, error)
 	CountAll() (int, error)
 	Upsert(program *model.RadioProgram) (int64, error)
+	// FindPopularSummary は minReviews 件以上のレビューを持つ番組を
+	// 平均評価降順で返す（JOIN集計、N+1を回避）。
+	FindPopularSummary(minReviews, limit int) ([]model.ProgramSummary, error)
+	FindSummaryByIDs(ids []int64) ([]model.ProgramSummary, error)
+	// FindTrendingSummary は cutoff 以降に評価4.0以上のレビューが1件以上ある
+	// 番組を最近の高評価数降順で返す（JOIN集計、N+1を回避）。
+	FindTrendingSummary(cutoff time.Time, limit int) ([]model.ProgramSummary, error)
 }
 
 // FavoriteProgramRepositoryInterface

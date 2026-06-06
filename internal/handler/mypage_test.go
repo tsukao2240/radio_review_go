@@ -16,16 +16,16 @@ import (
 
 // stubPostService は PostServiceInterface のスタブ実装。
 type stubPostService struct {
-	getAllPostsFunc         func(perPage, page int) ([]model.Post, int, error)
-	getPostsByUserFunc     func(userID int64, perPage, page int) ([]model.Post, int, error)
-	getPostByIDFunc        func(postID int64) (*model.Post, error)
-	updatePostFunc         func(postID int64, data map[string]interface{}) error
-	deletePostFunc         func(postID int64) error
-	createPostFunc         func(data map[string]interface{}, userID int64) (*model.Post, error)
-	getPostsByProgramFunc  func(stationID, programTitle string, perPage, page int) ([]model.Post, int, error)
-	getPostsFilteredFunc   func(filters map[string]interface{}, perPage, page int) ([]model.Post, int, error)
-	getAvgRatingFunc       func(programID int64) (float64, error)
-	getAllTagsFunc          func() ([]model.PostTag, error)
+	getAllPostsFunc       func(perPage, page int) ([]model.Post, int, error)
+	getPostsByUserFunc    func(userID int64, perPage, page int) ([]model.Post, int, error)
+	getPostByIDFunc       func(postID int64) (*model.Post, error)
+	updatePostFunc        func(postID int64, data map[string]interface{}) error
+	deletePostFunc        func(postID int64) error
+	createPostFunc        func(data map[string]interface{}, userID int64) (*model.Post, error)
+	getPostsByProgramFunc func(stationID, programTitle string, perPage, page int) ([]model.Post, int, error)
+	getPostsFilteredFunc  func(filters map[string]interface{}, perPage, page int) ([]model.Post, int, error)
+	getAvgRatingFunc      func(programID int64) (float64, error)
+	getAllTagsFunc        func() ([]model.PostTag, error)
 }
 
 func (s *stubPostService) GetAllPosts(perPage, page int) ([]model.Post, int, error) {

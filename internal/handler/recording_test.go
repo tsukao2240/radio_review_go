@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -365,14 +366,15 @@ func TestDownloadRecording_Forbidden(t *testing.T) {
 
 func TestDownloadRecording_FileOpenError(t *testing.T) {
 	_, rdb := newMiniRedis(t)
-	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	dir := t.TempDir()
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
 	store := sessions.NewCookieStore([]byte("test"))
 
 	info := &model.RecordingInfo{
 		RecordingID: "filerr123",
 		OwnerKey:    "user_1",
 		Status:      "completed",
-		FilePath:    "/nonexistent/path/file.aac",
+		FilePath:    filepath.Join(dir, "file.aac"),
 	}
 	data, _ := json.Marshal(info)
 	rdb.Set(context.Background(), "recording_filerr123", string(data), 0)
@@ -613,5 +615,99 @@ func TestDeleteRecording_BadJSON(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("got %d, want 400", rr.Code)
+	}
+}
+
+func TestStreamRecording_NotFound(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test-secret"))
+
+	req := httptest.NewRequest(http.MethodGet, "/recording/stream?recording_id=notexist", nil)
+	w := httptest.NewRecorder()
+	h.StreamRecording(store)(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("got %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestStreamRecording_NotCompleted(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test-secret"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "test123",
+		Status:      "recording",
+		OwnerKey:    "session_",
+		FilePath:    "/tmp/test.aac",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_test123", string(data), 0)
+
+	req := httptest.NewRequest(http.MethodGet, "/recording/stream?recording_id=test123", nil)
+	w := httptest.NewRecorder()
+	h.StreamRecording(store)(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestStreamRecording_Forbidden(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test-secret"))
+
+	info := &model.RecordingInfo{
+		RecordingID: "test-forbidden",
+		Status:      "completed",
+		OwnerKey:    "user_99",
+		FilePath:    "/tmp/test.aac",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_test-forbidden", string(data), 0)
+
+	req := httptest.NewRequest(http.MethodGet, "/recording/stream?recording_id=test-forbidden", nil)
+	w := httptest.NewRecorder()
+	h.StreamRecording(store)(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("got %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestStreamRecording_CompletedServesFile(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	dir := t.TempDir()
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+	store := sessions.NewCookieStore([]byte("test-secret"))
+
+	// テスト用AACファイルを作成
+	filePath := filepath.Join(dir, "test.aac")
+	if err := os.WriteFile(filePath, []byte("fake aac content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	info := &model.RecordingInfo{
+		RecordingID: "test456",
+		Status:      "completed",
+		OwnerKey:    "session_",
+		FilePath:    filePath,
+		ProgramName: "テスト番組",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_test456", string(data), 0)
+
+	req := httptest.NewRequest(http.MethodGet, "/recording/stream?recording_id=test456", nil)
+	w := httptest.NewRecorder()
+	h.StreamRecording(store)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "audio/aac" {
+		t.Errorf("Content-Type = %q, want audio/aac", ct)
 	}
 }

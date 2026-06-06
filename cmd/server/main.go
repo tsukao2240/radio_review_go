@@ -225,6 +225,7 @@ func main() {
 	r.Post("/recording/timefree/start", recordingHandler.StartTimefreeRecording(store))
 	r.Post("/recording/stop", recordingHandler.StopRecording(store))
 	r.Get("/recording/status", recordingHandler.GetRecordingStatus(store))
+	r.Get("/recording/stream", recordingHandler.StreamRecording(store))
 	r.Get("/recording/download", recordingHandler.DownloadRecording(store))
 	r.Get("/recording/list", recordingHandler.ListRecordings(store))
 	r.Get("/recording/history", recordingHandler.ShowHistory(store))

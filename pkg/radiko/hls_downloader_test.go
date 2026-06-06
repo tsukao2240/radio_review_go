@@ -212,7 +212,6 @@ func TestDownloadTimefree_WritesSegments(t *testing.T) {
 	}
 }
 
-
 func TestDownloadTimefree_NoSegments(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "#EXTM3U\n#EXT-X-ENDLIST\n")

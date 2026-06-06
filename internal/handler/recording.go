@@ -86,6 +86,12 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+func (h *RecordingHandler) validateRecordingFilePath(filePath string) bool {
+	cleanPath := filepath.Clean(filePath)
+	storageRoot := filepath.Clean(h.storagePath) + string(os.PathSeparator)
+	return strings.HasPrefix(cleanPath, storageRoot)
+}
+
 // StartTimefreeRecording は POST /recording/timefree/start を処理する。
 // タイムフリー録音を開始し、非同期で HLS ダウンロードを実行する。
 func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.HandlerFunc {
@@ -275,6 +281,11 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 			return
 		}
 
+		if !h.validateRecordingFilePath(info.FilePath) {
+			writeError(w, http.StatusForbidden, "不正なファイルパスです")
+			return
+		}
+
 		f, err := os.Open(info.FilePath)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "ファイルのオープンに失敗しました: "+err.Error())
@@ -286,6 +297,56 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, downloadName))
 		http.ServeContent(w, r, downloadName, time.Time{}, f)
+	}
+}
+
+// StreamRecording は GET /recording/stream を処理する。
+// 録音ファイルを audio/aac で返し、Range リクエストによるシークを可能にする。
+func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		recordingID := r.URL.Query().Get("recording_id")
+		if recordingID == "" {
+			writeError(w, http.StatusBadRequest, "recording_id は必須です")
+			return
+		}
+
+		info, err := h.loadRecordingInfo(r.Context(), recordingID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "録音情報が見つかりません")
+			return
+		}
+
+		ownerKey := h.ownerKey(r, store)
+		if info.OwnerKey != ownerKey {
+			writeError(w, http.StatusForbidden, "アクセス権限がありません")
+			return
+		}
+
+		if info.Status != "completed" {
+			writeError(w, http.StatusBadRequest, "録音が完了していません (status: "+info.Status+")")
+			return
+		}
+
+		if !h.validateRecordingFilePath(info.FilePath) {
+			writeError(w, http.StatusForbidden, "不正なファイルパスです")
+			return
+		}
+
+		f, err := os.Open(info.FilePath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ファイルのオープンに失敗しました: "+err.Error())
+			return
+		}
+		defer f.Close()
+
+		stat, err := f.Stat()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ファイル情報の取得に失敗しました: "+err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "audio/aac")
+		http.ServeContent(w, r, info.ProgramName+".aac", stat.ModTime(), f)
 	}
 }
 
@@ -404,6 +465,10 @@ func (h *RecordingHandler) DeleteRecording(store sessions.Store) http.HandlerFun
 
 		// 録音ファイルを削除（エラーは無視）
 		if info.FilePath != "" {
+			if !h.validateRecordingFilePath(info.FilePath) {
+				writeError(w, http.StatusForbidden, "不正なファイルパスです")
+				return
+			}
 			_ = os.Remove(info.FilePath)
 		}
 

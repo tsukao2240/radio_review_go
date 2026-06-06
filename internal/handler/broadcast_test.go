@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yourname/radio_review_go/internal/model"
@@ -33,8 +34,17 @@ func (s *stubBroadcastProgramRepo) CountByTitle(keyword string) (int, error) { r
 func (s *stubBroadcastProgramRepo) FindAll(limit, offset int) ([]model.RadioProgram, error) {
 	return nil, nil
 }
-func (s *stubBroadcastProgramRepo) CountAll() (int, error)                              { return 0, nil }
-func (s *stubBroadcastProgramRepo) Upsert(prog *model.RadioProgram) (int64, error)      { return 0, nil }
+func (s *stubBroadcastProgramRepo) CountAll() (int, error)                         { return 0, nil }
+func (s *stubBroadcastProgramRepo) Upsert(prog *model.RadioProgram) (int64, error) { return 0, nil }
+func (s *stubBroadcastProgramRepo) FindPopularSummary(minReviews, limit int) ([]model.ProgramSummary, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) FindSummaryByIDs(ids []int64) ([]model.ProgramSummary, error) {
+	return nil, nil
+}
+func (s *stubBroadcastProgramRepo) FindTrendingSummary(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
+	return nil, nil
+}
 
 var _ repository.RadioProgramRepositoryInterface = (*stubBroadcastProgramRepo)(nil)
 
