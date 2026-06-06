@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -15,8 +16,9 @@ func NewPostLikeRepository(db *sqlx.DB) *PostLikeRepository {
 }
 
 func (r *PostLikeRepository) Exists(postID, userID int64) (bool, error) {
+	ctx := context.Background()
 	var count int
-	err := r.db.Get(&count,
+	err := r.db.GetContext(ctx, &count,
 		"SELECT COUNT(*) FROM post_likes WHERE post_id = ? AND user_id = ?",
 		postID, userID,
 	)
@@ -27,7 +29,8 @@ func (r *PostLikeRepository) Exists(postID, userID int64) (bool, error) {
 }
 
 func (r *PostLikeRepository) Create(postID, userID int64) error {
-	_, err := r.db.Exec(
+	ctx := context.Background()
+	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO post_likes (post_id, user_id, created_at, updated_at)
 		 VALUES (?, ?, NOW(), NOW())`,
 		postID, userID,
@@ -36,7 +39,7 @@ func (r *PostLikeRepository) Create(postID, userID int64) error {
 		return fmt.Errorf("repository.PostLikeRepository.Create: %w", err)
 	}
 
-	_, err = r.db.Exec(
+	_, err = r.db.ExecContext(ctx,
 		"UPDATE posts SET likes_count = likes_count + 1, updated_at = NOW() WHERE id = ?",
 		postID,
 	)
@@ -47,7 +50,8 @@ func (r *PostLikeRepository) Create(postID, userID int64) error {
 }
 
 func (r *PostLikeRepository) Delete(postID, userID int64) error {
-	_, err := r.db.Exec(
+	ctx := context.Background()
+	_, err := r.db.ExecContext(ctx,
 		"DELETE FROM post_likes WHERE post_id = ? AND user_id = ?",
 		postID, userID,
 	)
@@ -55,7 +59,7 @@ func (r *PostLikeRepository) Delete(postID, userID int64) error {
 		return fmt.Errorf("repository.PostLikeRepository.Delete: %w", err)
 	}
 
-	_, err = r.db.Exec(
+	_, err = r.db.ExecContext(ctx,
 		"UPDATE posts SET likes_count = GREATEST(likes_count - 1, 0), updated_at = NOW() WHERE id = ?",
 		postID,
 	)
@@ -66,8 +70,9 @@ func (r *PostLikeRepository) Delete(postID, userID int64) error {
 }
 
 func (r *PostLikeRepository) CountByPost(postID int64) (int, error) {
+	ctx := context.Background()
 	var count int
-	err := r.db.Get(&count,
+	err := r.db.GetContext(ctx, &count,
 		"SELECT COUNT(*) FROM post_likes WHERE post_id = ?",
 		postID,
 	)

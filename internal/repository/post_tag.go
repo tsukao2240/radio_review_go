@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -16,8 +17,12 @@ func NewPostTagRepository(db *sqlx.DB) *PostTagRepository {
 }
 
 func (r *PostTagRepository) FindAll() ([]model.PostTag, error) {
+	return r.FindAllContext(context.Background())
+}
+
+func (r *PostTagRepository) FindAllContext(ctx context.Context) ([]model.PostTag, error) {
 	var tags []model.PostTag
-	err := r.db.Select(&tags, "SELECT * FROM post_tags ORDER BY display_order ASC, id ASC")
+	err := r.db.SelectContext(ctx, &tags, "SELECT * FROM post_tags ORDER BY display_order ASC, id ASC")
 	if err != nil {
 		return nil, fmt.Errorf("repository.PostTagRepository.FindAll: %w", err)
 	}
@@ -25,8 +30,12 @@ func (r *PostTagRepository) FindAll() ([]model.PostTag, error) {
 }
 
 func (r *PostTagRepository) FindByID(id int64) (*model.PostTag, error) {
+	return r.FindByIDContext(context.Background(), id)
+}
+
+func (r *PostTagRepository) FindByIDContext(ctx context.Context, id int64) (*model.PostTag, error) {
 	var tag model.PostTag
-	err := r.db.Get(&tag, "SELECT * FROM post_tags WHERE id = ? LIMIT 1", id)
+	err := r.db.GetContext(ctx, &tag, "SELECT * FROM post_tags WHERE id = ? LIMIT 1", id)
 	if err != nil {
 		return nil, fmt.Errorf("repository.PostTagRepository.FindByID: %w", err)
 	}
@@ -34,8 +43,12 @@ func (r *PostTagRepository) FindByID(id int64) (*model.PostTag, error) {
 }
 
 func (r *PostTagRepository) FindByPostID(postID int64) ([]model.PostTag, error) {
+	return r.FindByPostIDContext(context.Background(), postID)
+}
+
+func (r *PostTagRepository) FindByPostIDContext(ctx context.Context, postID int64) ([]model.PostTag, error) {
 	var tags []model.PostTag
-	err := r.db.Select(&tags,
+	err := r.db.SelectContext(ctx, &tags,
 		`SELECT pt.* FROM post_tags pt
 		 INNER JOIN post_post_tag ppt ON ppt.post_tag_id = pt.id
 		 WHERE ppt.post_id = ?
@@ -49,7 +62,11 @@ func (r *PostTagRepository) FindByPostID(postID int64) ([]model.PostTag, error) 
 }
 
 func (r *PostTagRepository) AttachToPost(postID, tagID int64) error {
-	_, err := r.db.Exec(
+	return r.AttachToPostContext(context.Background(), postID, tagID)
+}
+
+func (r *PostTagRepository) AttachToPostContext(ctx context.Context, postID, tagID int64) error {
+	_, err := r.db.ExecContext(ctx,
 		`INSERT IGNORE INTO post_post_tag (post_id, post_tag_id, created_at, updated_at)
 		 VALUES (?, ?, NOW(), NOW())`,
 		postID, tagID,
@@ -61,12 +78,54 @@ func (r *PostTagRepository) AttachToPost(postID, tagID int64) error {
 }
 
 func (r *PostTagRepository) DetachFromPost(postID, tagID int64) error {
-	_, err := r.db.Exec(
+	return r.DetachFromPostContext(context.Background(), postID, tagID)
+}
+
+func (r *PostTagRepository) DetachFromPostContext(ctx context.Context, postID, tagID int64) error {
+	_, err := r.db.ExecContext(ctx,
 		"DELETE FROM post_post_tag WHERE post_id = ? AND post_tag_id = ?",
 		postID, tagID,
 	)
 	if err != nil {
 		return fmt.Errorf("repository.PostTagRepository.DetachFromPost: %w", err)
+	}
+	return nil
+}
+
+func (r *PostTagRepository) FindByPostIDTx(ctx context.Context, tx *sqlx.Tx, postID int64) ([]model.PostTag, error) {
+	var tags []model.PostTag
+	err := tx.SelectContext(ctx, &tags,
+		`SELECT pt.* FROM post_tags pt
+		 INNER JOIN post_post_tag ppt ON ppt.post_tag_id = pt.id
+		 WHERE ppt.post_id = ?
+		 ORDER BY pt.display_order ASC, pt.id ASC`,
+		postID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("repository.PostTagRepository.FindByPostIDTx: %w", err)
+	}
+	return tags, nil
+}
+
+func (r *PostTagRepository) AttachToPostTx(ctx context.Context, tx *sqlx.Tx, postID, tagID int64) error {
+	_, err := tx.ExecContext(ctx,
+		`INSERT IGNORE INTO post_post_tag (post_id, post_tag_id, created_at, updated_at)
+		 VALUES (?, ?, NOW(), NOW())`,
+		postID, tagID,
+	)
+	if err != nil {
+		return fmt.Errorf("repository.PostTagRepository.AttachToPostTx: %w", err)
+	}
+	return nil
+}
+
+func (r *PostTagRepository) DetachFromPostTx(ctx context.Context, tx *sqlx.Tx, postID, tagID int64) error {
+	_, err := tx.ExecContext(ctx,
+		"DELETE FROM post_post_tag WHERE post_id = ? AND post_tag_id = ?",
+		postID, tagID,
+	)
+	if err != nil {
+		return fmt.Errorf("repository.PostTagRepository.DetachFromPostTx: %w", err)
 	}
 	return nil
 }

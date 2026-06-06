@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/yourname/radio_review_go/internal/model"
@@ -129,6 +130,14 @@ func TestPostInteractionService_Like(t *testing.T) {
 		}
 		if !errors.Is(err, repoErr) {
 			t.Errorf("expected wrapped repoErr, got %v", err)
+		}
+	})
+
+	t.Run("body too long: returns error", func(t *testing.T) {
+		svc := NewPostInteractionService(&stubLikeRepo{}, &stubCommentRepo{})
+		_, err := svc.AddComment(1, 1, strings.Repeat("あ", maxCommentBodyLength+1))
+		if err == nil {
+			t.Fatal("expected error for too long body")
 		}
 	})
 }

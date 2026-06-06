@@ -1,11 +1,21 @@
 package job
 
 import (
+	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/yourname/radio_review_go/internal/model"
 )
 
 func TestInsertColon(t *testing.T) {
@@ -147,5 +157,63 @@ func TestInsertColon_FtToConversion(t *testing.T) {
 	want := "20:2506021300"
 	if got != want {
 		t.Errorf("insertColon(%q) = %q, want %q", "202506021300", got, want)
+	}
+}
+
+func TestSchedulerSweepOrphanRecordingFiles(t *testing.T) {
+	dir := t.TempDir()
+	oldOrphan := filepath.Join(dir, "old_orphan.aac")
+	activeFile := filepath.Join(dir, "active.aac")
+	freshFile := filepath.Join(dir, "fresh.aac")
+	otherExt := filepath.Join(dir, "old.txt")
+	for _, path := range []string{oldOrphan, activeFile, freshFile, otherExt} {
+		if err := os.WriteFile(path, []byte("x"), 0644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+	oldTime := time.Now().Add(-26 * time.Hour)
+	for _, path := range []string{oldOrphan, activeFile, otherExt} {
+		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+			t.Fatalf("Chtimes %s: %v", path, err)
+		}
+	}
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	active := model.RecordingInfo{RecordingID: "active", FilePath: activeFile}
+	b, _ := json.Marshal(active)
+	if err := rdb.Set(context.Background(), "recording_active", string(b), time.Hour).Err(); err != nil {
+		t.Fatalf("redis set: %v", err)
+	}
+
+	s := NewScheduler(nil, rdb, nil, nil, dir)
+	s.SweepOrphanRecordingFiles(context.Background())
+
+	if _, err := os.Stat(oldOrphan); !os.IsNotExist(err) {
+		t.Fatalf("old orphan should be removed, stat err=%v", err)
+	}
+	for _, path := range []string{activeFile, freshFile, otherExt} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s should remain: %v", path, err)
+		}
+	}
+}
+
+func TestIsRecordingFilePathAllowed(t *testing.T) {
+	dir := t.TempDir()
+	if !isRecordingFilePathAllowed(dir, filepath.Join(dir, "ok.aac")) {
+		t.Fatal("expected in-storage aac path to be allowed")
+	}
+	if isRecordingFilePathAllowed(dir, filepath.Join(dir, "bad.txt")) {
+		t.Fatal("expected non-aac path to be rejected")
+	}
+	if isRecordingFilePathAllowed(dir, filepath.Join(dir, "..", "escape.aac")) {
+		t.Fatal("expected escaping path to be rejected")
 	}
 }

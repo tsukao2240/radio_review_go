@@ -1,14 +1,25 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
 	"github.com/yourname/radio_review_go/internal/middleware"
+	"github.com/yourname/radio_review_go/internal/model"
 	"github.com/yourname/radio_review_go/internal/service"
+)
+
+const (
+	handlerReviewBodyLimit  = 5000
+	handlerCommentBodyLimit = 1000
+	handlerTagLimit         = 10
+	handlerDBTimeout        = 3 * time.Second
 )
 
 // PostHandler はレビュー投稿関連の HTTP ハンドラーを管理する。
@@ -52,7 +63,10 @@ func (h *PostHandler) IndexPrograms(w http.ResponseWriter, r *http.Request) {
 		filters = map[string]interface{}{"keyword": keyword}
 	}
 
-	posts, total, err := h.postService.GetPostsFiltered(filters, perPage, page)
+	ctx, cancel := context.WithTimeout(r.Context(), handlerDBTimeout)
+	defer cancel()
+
+	posts, total, err := h.getPostsFiltered(ctx, filters, perPage, page)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "番組一覧の取得に失敗しました: "+err.Error())
 		return
@@ -125,6 +139,14 @@ func (h *PostHandler) CreateReview(w http.ResponseWriter, r *http.Request) {
 	if len(tagIDStrs) == 0 {
 		tagIDStrs = r.Form["tag_ids"]
 	}
+	if len(tagIDStrs) > handlerTagLimit {
+		writeError(w, http.StatusUnprocessableEntity, "タグは10個までです")
+		return
+	}
+	if len([]rune(r.FormValue("body"))) > handlerReviewBodyLimit {
+		writeError(w, http.StatusUnprocessableEntity, "レビュー本文は5000文字以内で入力してください")
+		return
+	}
 	var tagIDs []interface{}
 	for _, s := range tagIDStrs {
 		if id, err := strconv.ParseInt(s, 10, 64); err == nil {
@@ -135,8 +157,14 @@ func (h *PostHandler) CreateReview(w http.ResponseWriter, r *http.Request) {
 		data["tag_ids"] = tagIDs
 	}
 
-	post, err := h.postService.CreatePost(data, userID)
+	ctx, cancel := context.WithTimeout(r.Context(), handlerDBTimeout)
+	defer cancel()
+	post, err := h.createPost(ctx, data, userID)
 	if err != nil {
+		if isValidationError(err) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "レビューの投稿に失敗しました: "+err.Error())
 		return
 	}
@@ -157,7 +185,9 @@ func (h *PostHandler) ListAllReviews(w http.ResponseWriter, r *http.Request) {
 	}
 	perPage := 20
 
-	posts, total, err := h.postService.GetAllPosts(perPage, page)
+	ctx, cancel := context.WithTimeout(r.Context(), handlerDBTimeout)
+	defer cancel()
+	posts, total, err := h.getAllPosts(ctx, perPage, page)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "レビュー一覧の取得に失敗しました: "+err.Error())
 		return
@@ -185,7 +215,9 @@ func (h *PostHandler) ListReviewsByProgram(w http.ResponseWriter, r *http.Reques
 	}
 	perPage := 20
 
-	posts, total, err := h.postService.GetPostsByProgram(stationID, title, perPage, page)
+	ctx, cancel := context.WithTimeout(r.Context(), handlerDBTimeout)
+	defer cancel()
+	posts, total, err := h.getPostsByProgram(ctx, stationID, title, perPage, page)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "レビュー一覧の取得に失敗しました: "+err.Error())
 		return
@@ -298,9 +330,19 @@ func (h *PostHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "リクエストボディのパースに失敗しました")
 		return
 	}
+	if len([]rune(req.Body)) > handlerCommentBodyLimit {
+		writeError(w, http.StatusUnprocessableEntity, "コメント本文は1000文字以内で入力してください")
+		return
+	}
 
-	comment, err := h.interactionService.AddComment(req.PostID, userID, req.Body)
+	ctx, cancel := context.WithTimeout(r.Context(), handlerDBTimeout)
+	defer cancel()
+	comment, err := h.addComment(ctx, req.PostID, userID, req.Body)
 	if err != nil {
+		if isValidationError(err) {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "コメントの追加に失敗しました: "+err.Error())
 		return
 	}
@@ -309,6 +351,61 @@ func (h *PostHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 		"message": "ok",
 		"comment": comment,
 	})
+}
+
+func (h *PostHandler) createPost(ctx context.Context, data map[string]interface{}, userID int64) (*model.Post, error) {
+	if svc, ok := h.postService.(interface {
+		CreatePostContext(context.Context, map[string]interface{}, int64) (*model.Post, error)
+	}); ok {
+		return svc.CreatePostContext(ctx, data, userID)
+	}
+	return h.postService.CreatePost(data, userID)
+}
+
+func (h *PostHandler) getAllPosts(ctx context.Context, perPage, page int) ([]model.Post, int, error) {
+	if svc, ok := h.postService.(interface {
+		GetAllPostsContext(context.Context, int, int) ([]model.Post, int, error)
+	}); ok {
+		return svc.GetAllPostsContext(ctx, perPage, page)
+	}
+	return h.postService.GetAllPosts(perPage, page)
+}
+
+func (h *PostHandler) getPostsByProgram(ctx context.Context, stationID, title string, perPage, page int) ([]model.Post, int, error) {
+	if svc, ok := h.postService.(interface {
+		GetPostsByProgramContext(context.Context, string, string, int, int) ([]model.Post, int, error)
+	}); ok {
+		return svc.GetPostsByProgramContext(ctx, stationID, title, perPage, page)
+	}
+	return h.postService.GetPostsByProgram(stationID, title, perPage, page)
+}
+
+func (h *PostHandler) getPostsFiltered(ctx context.Context, filters map[string]interface{}, perPage, page int) ([]model.Post, int, error) {
+	if svc, ok := h.postService.(interface {
+		GetPostsFilteredContext(context.Context, map[string]interface{}, int, int) ([]model.Post, int, error)
+	}); ok {
+		return svc.GetPostsFilteredContext(ctx, filters, perPage, page)
+	}
+	return h.postService.GetPostsFiltered(filters, perPage, page)
+}
+
+func isValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "characters or fewer") ||
+		strings.Contains(msg, "tag count") ||
+		strings.Contains(msg, "body is required")
+}
+
+func (h *PostHandler) addComment(ctx context.Context, postID, userID int64, body string) (*model.PostComment, error) {
+	if svc, ok := h.interactionService.(interface {
+		AddCommentContext(context.Context, int64, int64, string) (*model.PostComment, error)
+	}); ok {
+		return svc.AddCommentContext(ctx, postID, userID, body)
+	}
+	return h.interactionService.AddComment(postID, userID, body)
 }
 
 // DeleteComment は POST /api/posts/comment/delete を処理する。コメント削除（要認証）。

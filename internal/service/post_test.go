@@ -2,9 +2,14 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
 	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/yourname/radio_review_go/internal/repository"
 )
 
 // --- stub: PostRepository ---
@@ -414,6 +419,83 @@ func TestPostService_CreatePost_TagIDsInt64Slice(t *testing.T) {
 	}
 }
 
+func TestPostService_CreatePost_AttachTagErrorIsPropagated(t *testing.T) {
+	repoErr := errors.New("attach failed")
+	postRepo := &stubPostRepo{
+		createFunc: func(post *model.Post) (int64, error) { return 1, nil },
+	}
+	tagRepo := &stubTagRepo{
+		attachToPostFunc: func(postID, tagID int64) error { return repoErr },
+	}
+	svc := NewPostService(postRepo, &stubProgramRepo{}, tagRepo)
+	data := map[string]interface{}{
+		"station_id": "TBS", "program_title": "p", "title": "t", "body": "b",
+		"tag_ids": []int64{1},
+	}
+	_, err := svc.CreatePost(data, 1)
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected attach error, got %v", err)
+	}
+}
+
+func TestPostService_CreatePost_TxRollsBackOnAttachError(t *testing.T) {
+	rawDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer rawDB.Close()
+	db := sqlx.NewDb(rawDB, "mysql")
+
+	mock.ExpectBegin()
+	now := time.Now()
+	mock.ExpectQuery("SELECT \\* FROM radio_programs WHERE station_id = \\? AND title = \\? LIMIT 1").
+		WithArgs("TBS", "p").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "station_id", "title", "cast", "start", "end", "info", "url", "image", "created_at", "updated_at",
+		}).AddRow(99, "TBS", "p", "", "", "", nil, nil, nil, now, now))
+	mock.ExpectExec("INSERT INTO posts").
+		WillReturnResult(sqlmock.NewResult(7, 1))
+	mock.ExpectExec("INSERT IGNORE INTO post_post_tag").
+		WillReturnError(errors.New("attach failed"))
+	mock.ExpectRollback()
+
+	svc := NewPostService(
+		repository.NewPostRepository(db),
+		repository.NewRadioProgramRepository(db),
+		repository.NewPostTagRepository(db),
+	)
+	_, err = svc.CreatePost(map[string]interface{}{
+		"station_id": "TBS", "program_title": "p", "title": "t", "body": "b", "tag_ids": []int64{1},
+	}, 1)
+	if err == nil {
+		t.Fatal("expected attach error")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestPostService_CreatePost_Validation(t *testing.T) {
+	t.Run("review body too long", func(t *testing.T) {
+		svc := NewPostService(&stubPostRepo{}, &stubProgramRepo{}, &stubTagRepo{})
+		_, err := svc.CreatePost(map[string]interface{}{
+			"body": strings.Repeat("あ", maxReviewBodyLength+1),
+		}, 1)
+		if err == nil {
+			t.Fatal("expected validation error")
+		}
+	})
+
+	t.Run("too many tags", func(t *testing.T) {
+		svc := NewPostService(&stubPostRepo{}, &stubProgramRepo{}, &stubTagRepo{})
+		tags := make([]int64, maxPostTagCount+1)
+		_, err := svc.CreatePost(map[string]interface{}{"tag_ids": tags}, 1)
+		if err == nil {
+			t.Fatal("expected validation error")
+		}
+	})
+}
+
 func TestPostService_UpdatePost(t *testing.T) {
 	t.Run("正常更新", func(t *testing.T) {
 		var updated *model.Post
@@ -475,6 +557,25 @@ func TestPostService_UpdatePost(t *testing.T) {
 		}
 		svc := NewPostService(postRepo, &stubProgramRepo{}, &stubTagRepo{})
 		if err := svc.UpdatePost(1, map[string]interface{}{"user_id": int64(1)}); !errors.Is(err, repoErr) {
+			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+
+	t.Run("タグ取得エラー: 伝播", func(t *testing.T) {
+		repoErr := errors.New("find tags error")
+		postRepo := &stubPostRepo{
+			findByIDFunc: func(id int64) (*model.Post, error) {
+				return &model.Post{ID: id, UserID: 1}, nil
+			},
+		}
+		tagRepo := &stubTagRepo{
+			findByPostIDFunc: func(postID int64) ([]model.PostTag, error) {
+				return nil, repoErr
+			},
+		}
+		svc := NewPostService(postRepo, &stubProgramRepo{}, tagRepo)
+		err := svc.UpdatePost(1, map[string]interface{}{"user_id": int64(1), "tag_ids": []int64{1}})
+		if !errors.Is(err, repoErr) {
 			t.Errorf("expected repoErr, got %v", err)
 		}
 	})

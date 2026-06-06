@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +35,26 @@ func TestResolveAppKey(t *testing.T) {
 			t.Fatal("expected fallback key")
 		}
 	})
+}
+
+func TestWriteRouteRateLimitsConfigured(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("ReadFile main.go: %v", err)
+	}
+	body := string(src)
+	required := []string{
+		`RateLimit(10, time.Minute)).Post("/review/{id}"`,
+		`RateLimit(20, time.Minute)).Post("/api/posts/comment"`,
+		`RateLimit(30, time.Minute)).Post("/favorites"`,
+		`RateLimit(30, time.Minute)).Post("/favorites/delete"`,
+		`RateLimit(5, time.Minute)).Post("/recording/timefree/start"`,
+	}
+	for _, needle := range required {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("missing rate limit route config: %s", needle)
+		}
+	}
 }
 
 func TestNewHTTPServerTimeouts(t *testing.T) {

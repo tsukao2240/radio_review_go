@@ -115,7 +115,9 @@ func (s *PasswordResetService) Reset(email, token, newPassword, newPasswordConfi
 
 	// 有効期限確認（60分）
 	if time.Since(pr.CreatedAt) > passwordResetTTL {
-		_ = s.resetRepo.Delete(email)
+		if err := s.resetRepo.Delete(email); err != nil {
+			log.Printf("[PasswordReset] expired token delete error: %v", err)
+		}
 		return errors.New("パスワードリセットトークンの有効期限が切れています。再度リセットを申請してください")
 	}
 
@@ -137,7 +139,9 @@ func (s *PasswordResetService) Reset(email, token, newPassword, newPasswordConfi
 	}
 
 	// 使用済みトークンを削除
-	_ = s.resetRepo.Delete(email)
+	if err := s.resetRepo.Delete(email); err != nil {
+		log.Printf("[PasswordReset] used token delete error: %v", err)
+	}
 
 	return nil
 }

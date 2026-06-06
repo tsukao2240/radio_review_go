@@ -1,12 +1,20 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/yourname/radio_review_go/internal/model"
 	"github.com/yourname/radio_review_go/internal/repository"
 )
+
+const maxCommentBodyLength = 1000
+
+type contextPostCommentRepository interface {
+	CreateContext(context.Context, *model.PostComment) (int64, error)
+}
 
 // PostInteractionService は PostInteractionServiceInterface を実装する。
 type PostInteractionService struct {
@@ -51,8 +59,15 @@ func (s *PostInteractionService) Unlike(postID, userID int64) error {
 
 // AddComment は投稿にコメントを追加する。
 func (s *PostInteractionService) AddComment(postID, userID int64, body string) (*model.PostComment, error) {
-	if body == "" {
+	return s.AddCommentContext(context.Background(), postID, userID, body)
+}
+
+func (s *PostInteractionService) AddCommentContext(ctx context.Context, postID, userID int64, body string) (*model.PostComment, error) {
+	if strings.TrimSpace(body) == "" {
 		return nil, errors.New("comment body is required")
+	}
+	if len([]rune(body)) > maxCommentBodyLength {
+		return nil, fmt.Errorf("comment body must be %d characters or fewer", maxCommentBodyLength)
 	}
 
 	comment := &model.PostComment{
@@ -61,7 +76,15 @@ func (s *PostInteractionService) AddComment(postID, userID int64, body string) (
 		Body:   body,
 	}
 
-	commentID, err := s.commentRepo.Create(comment)
+	var (
+		commentID int64
+		err       error
+	)
+	if repo, ok := s.commentRepo.(contextPostCommentRepository); ok {
+		commentID, err = repo.CreateContext(ctx, comment)
+	} else {
+		commentID, err = s.commentRepo.Create(comment)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("PostInteractionService.AddComment: %w", err)
 	}

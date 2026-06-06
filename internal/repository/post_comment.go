@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -16,8 +17,12 @@ func NewPostCommentRepository(db *sqlx.DB) *PostCommentRepository {
 }
 
 func (r *PostCommentRepository) FindByPost(postID int64) ([]model.PostComment, error) {
+	return r.FindByPostContext(context.Background(), postID)
+}
+
+func (r *PostCommentRepository) FindByPostContext(ctx context.Context, postID int64) ([]model.PostComment, error) {
 	var comments []model.PostComment
-	err := r.db.Select(&comments,
+	err := r.db.SelectContext(ctx, &comments,
 		"SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at ASC",
 		postID,
 	)
@@ -28,8 +33,12 @@ func (r *PostCommentRepository) FindByPost(postID int64) ([]model.PostComment, e
 }
 
 func (r *PostCommentRepository) FindByID(id int64) (*model.PostComment, error) {
+	return r.FindByIDContext(context.Background(), id)
+}
+
+func (r *PostCommentRepository) FindByIDContext(ctx context.Context, id int64) (*model.PostComment, error) {
 	var c model.PostComment
-	err := r.db.Get(&c, "SELECT * FROM post_comments WHERE id = ? LIMIT 1", id)
+	err := r.db.GetContext(ctx, &c, "SELECT * FROM post_comments WHERE id = ? LIMIT 1", id)
 	if err != nil {
 		return nil, fmt.Errorf("repository.PostCommentRepository.FindByID: %w", err)
 	}
@@ -37,7 +46,11 @@ func (r *PostCommentRepository) FindByID(id int64) (*model.PostComment, error) {
 }
 
 func (r *PostCommentRepository) Create(comment *model.PostComment) (int64, error) {
-	res, err := r.db.NamedExec(
+	return r.CreateContext(context.Background(), comment)
+}
+
+func (r *PostCommentRepository) CreateContext(ctx context.Context, comment *model.PostComment) (int64, error) {
+	res, err := r.db.NamedExecContext(ctx,
 		`INSERT INTO post_comments (post_id, user_id, body, created_at, updated_at)
 		 VALUES (:post_id, :user_id, :body, NOW(), NOW())`,
 		comment,
@@ -50,7 +63,7 @@ func (r *PostCommentRepository) Create(comment *model.PostComment) (int64, error
 		return 0, fmt.Errorf("repository.PostCommentRepository.Create LastInsertId: %w", err)
 	}
 
-	_, err = r.db.Exec(
+	_, err = r.db.ExecContext(ctx,
 		"UPDATE posts SET comments_count = comments_count + 1, updated_at = NOW() WHERE id = ?",
 		comment.PostID,
 	)
@@ -61,19 +74,20 @@ func (r *PostCommentRepository) Create(comment *model.PostComment) (int64, error
 }
 
 func (r *PostCommentRepository) Delete(id int64) error {
+	ctx := context.Background()
 	// Fetch the post_id before deleting so we can decrement the counter.
 	var postID int64
-	err := r.db.Get(&postID, "SELECT post_id FROM post_comments WHERE id = ? LIMIT 1", id)
+	err := r.db.GetContext(ctx, &postID, "SELECT post_id FROM post_comments WHERE id = ? LIMIT 1", id)
 	if err != nil {
 		return fmt.Errorf("repository.PostCommentRepository.Delete fetch post_id: %w", err)
 	}
 
-	_, err = r.db.Exec("DELETE FROM post_comments WHERE id = ?", id)
+	_, err = r.db.ExecContext(ctx, "DELETE FROM post_comments WHERE id = ?", id)
 	if err != nil {
 		return fmt.Errorf("repository.PostCommentRepository.Delete: %w", err)
 	}
 
-	_, err = r.db.Exec(
+	_, err = r.db.ExecContext(ctx,
 		"UPDATE posts SET comments_count = GREATEST(comments_count - 1, 0), updated_at = NOW() WHERE id = ?",
 		postID,
 	)

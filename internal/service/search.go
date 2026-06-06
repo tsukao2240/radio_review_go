@@ -32,7 +32,9 @@ func NewRadioProgramSearchService(repo repository.RadioProgramRepositoryInterfac
 // keywordMD5 は検索キーワードの MD5 ハッシュを16進数文字列で返す
 func keywordMD5(s string) string {
 	h := md5.New() //nolint:gosec
-	_, _ = h.Write([]byte(s))
+	if _, err := h.Write([]byte(s)); err != nil {
+		log.Printf("keywordMD5 write error: %v", err)
+	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

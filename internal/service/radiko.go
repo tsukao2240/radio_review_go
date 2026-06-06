@@ -119,7 +119,9 @@ func cacheSetRadiko(ctx context.Context, rdb *redis.Client, key string, val inte
 // md5Hex は文字列の MD5 ハッシュを16進数文字列で返す
 func md5Hex(s string) string {
 	h := md5.New() //nolint:gosec
-	_, _ = h.Write([]byte(s))
+	if _, err := h.Write([]byte(s)); err != nil {
+		log.Printf("md5Hex write error: %v", err)
+	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

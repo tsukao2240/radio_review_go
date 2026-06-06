@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -55,6 +56,8 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// 毎日5:00実行
 	go s.runDailyAt(ctx, 5, 0, s.insertRadioPrograms)
 	go s.runDailyAt(ctx, 5, 0, s.deleteDuplicateRecords)
+	// 録音情報のRedis TTL失効後に残った音声ファイルを掃除
+	go s.runEveryN(ctx, time.Hour, s.sweepOrphanRecordingFiles)
 }
 
 // runEveryMinute は毎分 fn を実行するループ。
@@ -93,6 +96,108 @@ func (s *Scheduler) runDailyAt(ctx context.Context, hour, minute int, fn func(ct
 			fn(ctx)
 		}
 	}
+}
+
+// SweepOrphanRecordingFiles はテスト用に孤児録音ファイル掃除を1回実行する。
+func (s *Scheduler) SweepOrphanRecordingFiles(ctx context.Context) {
+	s.sweepOrphanRecordingFiles(ctx)
+}
+
+func (s *Scheduler) sweepOrphanRecordingFiles(ctx context.Context) {
+	activeFiles, err := s.activeRecordingFiles(ctx)
+	if err != nil {
+		log.Printf("[job] sweepOrphanRecordingFiles: Redis 走査エラー: %v", err)
+		return
+	}
+	cutoff := time.Now().Add(-25 * time.Hour)
+	if err := filepath.WalkDir(s.storagePath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			log.Printf("[job] sweepOrphanRecordingFiles: walk エラー path=%s: %v", path, err)
+			return nil
+		}
+		if d.IsDir() || filepath.Ext(path) != ".aac" {
+			return nil
+		}
+		if !isRecordingFilePathAllowed(s.storagePath, path) {
+			log.Printf("[job] sweepOrphanRecordingFiles: path検証失敗 path=%s", path)
+			return nil
+		}
+		cleanPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil
+		}
+		if activeFiles[cleanPath] {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			log.Printf("[job] sweepOrphanRecordingFiles: stat エラー path=%s: %v", path, err)
+			return nil
+		}
+		if info.ModTime().After(cutoff) {
+			return nil
+		}
+		if err := os.Remove(path); err != nil {
+			log.Printf("[job] sweepOrphanRecordingFiles: remove エラー path=%s: %v", path, err)
+			return nil
+		}
+		log.Printf("[job] sweepOrphanRecordingFiles: 削除 path=%s", path)
+		return nil
+	}); err != nil {
+		log.Printf("[job] sweepOrphanRecordingFiles: WalkDir エラー: %v", err)
+	}
+}
+
+func (s *Scheduler) activeRecordingFiles(ctx context.Context) (map[string]bool, error) {
+	active := make(map[string]bool)
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.redis.Scan(ctx, cursor, "recording_*", 100).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			raw, err := s.redis.Get(ctx, key).Result()
+			if err != nil {
+				continue
+			}
+			var info model.RecordingInfo
+			if err := json.Unmarshal([]byte(raw), &info); err != nil || info.FilePath == "" {
+				continue
+			}
+			if !isRecordingFilePathAllowed(s.storagePath, info.FilePath) {
+				continue
+			}
+			absPath, err := filepath.Abs(info.FilePath)
+			if err == nil {
+				active[absPath] = true
+			}
+		}
+		if nextCursor == 0 {
+			break
+		}
+		cursor = nextCursor
+	}
+	return active, nil
+}
+
+func isRecordingFilePathAllowed(storagePath, path string) bool {
+	if filepath.Ext(path) != ".aac" {
+		return false
+	}
+	storageAbs, err := filepath.Abs(storagePath)
+	if err != nil {
+		return false
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(storageAbs, pathAbs)
+	if err != nil {
+		return false
+	}
+	return rel != "." && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 // ---------------------------------------------------------------------------

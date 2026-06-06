@@ -202,7 +202,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/review/{id}", postHandler.ShowReviewForm)
-		r.Post("/review/{id}", postHandler.CreateReview)
+		r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/review/{id}", postHandler.CreateReview)
 	})
 
 	// マイページ（認証必須）
@@ -218,13 +218,13 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/favorites", favHandler.Index)
-		r.Post("/favorites", favHandler.Store)
-		r.Post("/favorites/delete", favHandler.Destroy)
+		r.With(appmiddleware.RateLimit(30, time.Minute)).Post("/favorites", favHandler.Store)
+		r.With(appmiddleware.RateLimit(30, time.Minute)).Post("/favorites/delete", favHandler.Destroy)
 		r.Get("/favorites/check", favHandler.Check)
 	})
 
 	// 録音（認証不要）
-	r.Post("/recording/timefree/start", recordingHandler.StartTimefreeRecording(store))
+	r.With(appmiddleware.RateLimit(5, time.Minute)).Post("/recording/timefree/start", recordingHandler.StartTimefreeRecording(store))
 	r.Post("/recording/stop", recordingHandler.StopRecording(store))
 	r.Get("/recording/status", recordingHandler.GetRecordingStatus(store))
 	r.Get("/recording/stream", recordingHandler.StreamRecording(store))
@@ -264,7 +264,7 @@ func main() {
 		r.Use(appmiddleware.RequireAuth(store))
 		r.Post("/api/posts/like", postHandler.LikePost)
 		r.Post("/api/posts/unlike", postHandler.UnlikePost)
-		r.Post("/api/posts/comment", postHandler.AddComment)
+		r.With(appmiddleware.RateLimit(20, time.Minute)).Post("/api/posts/comment", postHandler.AddComment)
 		r.Post("/api/posts/comment/delete", postHandler.DeleteComment)
 		r.Get("/api/posts/comments", postHandler.GetComments)
 		r.Get("/api/posts/check-like", postHandler.CheckLike)
