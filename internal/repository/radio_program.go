@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/yourname/radio_review_go/internal/model"
@@ -91,6 +92,46 @@ func (r *RadioProgramRepository) CountAll() (int, error) {
 		return 0, fmt.Errorf("repository.RadioProgramRepository.CountAll: %w", err)
 	}
 	return count, nil
+}
+
+func (r *RadioProgramRepository) FindPopularSummary(minReviews, limit int) ([]model.ProgramSummary, error) {
+	var results []model.ProgramSummary
+	err := r.db.Select(&results, `
+		SELECT rp.id, rp.station_id, rp.title, COALESCE(rp.cast, '') AS cast,
+		       AVG(p.rating) AS avg_rating,
+		       COUNT(p.id) AS reviews_count,
+		       0 AS recent_high_count
+		FROM radio_programs rp
+		INNER JOIN posts p ON p.program_id = rp.id
+		GROUP BY rp.id, rp.station_id, rp.title, rp.cast
+		HAVING reviews_count >= ?
+		ORDER BY avg_rating DESC, reviews_count DESC
+		LIMIT ?
+	`, minReviews, limit)
+	if err != nil {
+		return nil, fmt.Errorf("repository.FindPopularSummary: %w", err)
+	}
+	return results, nil
+}
+
+func (r *RadioProgramRepository) FindTrendingSummary(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
+	var results []model.ProgramSummary
+	err := r.db.Select(&results, `
+		SELECT rp.id, rp.station_id, rp.title, COALESCE(rp.cast, '') AS cast,
+		       AVG(p.rating) AS avg_rating,
+		       COUNT(p.id) AS reviews_count,
+		       SUM(CASE WHEN p.rating >= 4.0 AND p.created_at >= ? THEN 1 ELSE 0 END) AS recent_high_count
+		FROM radio_programs rp
+		INNER JOIN posts p ON p.program_id = rp.id
+		GROUP BY rp.id, rp.station_id, rp.title, rp.cast
+		HAVING recent_high_count > 0
+		ORDER BY recent_high_count DESC, avg_rating DESC
+		LIMIT ?
+	`, cutoff, limit)
+	if err != nil {
+		return nil, fmt.Errorf("repository.FindTrendingSummary: %w", err)
+	}
+	return results, nil
 }
 
 // Upsert inserts or updates a radio program based on (station_id, title, start).

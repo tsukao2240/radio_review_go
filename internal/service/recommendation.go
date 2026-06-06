@@ -75,89 +75,26 @@ func (s *RecommendationService) GetRecommendations(userID int64) ([]map[string]i
 }
 
 // GetTrendingPrograms は直近 days 日間で高評価レビューが多いトレンド番組を返す。
-// 既存のリポジトリメソッドを組み合わせて実装する。
 func (s *RecommendationService) GetTrendingPrograms(days, limit int) ([]map[string]interface{}, error) {
-	// 全番組を取得し、それぞれの最近の高評価投稿数と平均評価を集計する
-	allPrograms, err := s.programRepo.FindAll(200, 0)
-	if err != nil {
-		return nil, fmt.Errorf("RecommendationService.GetTrendingPrograms FindAll: %w", err)
-	}
-
 	cutoff := time.Now().AddDate(0, 0, -days)
-
-	type trendEntry struct {
-		programID          int64
-		title              string
-		stationID          string
-		cast               string
-		recentReviewsCount int
-		avgRating          float64
+	summaries, err := s.programRepo.FindTrendingSummary(cutoff, limit)
+	if err != nil {
+		return nil, fmt.Errorf("RecommendationService.GetTrendingPrograms: %w", err)
 	}
-
-	var entries []trendEntry
-	for _, prog := range allPrograms {
-		posts, err := s.postRepo.FindByProgram(prog.StationID, prog.Title, 100, 0)
-		if err != nil {
-			continue
-		}
-
-		recentCount := 0
-		var ratingSum float64
-		var ratingCount int
-		for _, p := range posts {
-			if p.Rating >= 4.0 && p.CreatedAt.After(cutoff) {
-				recentCount++
-			}
-			ratingSum += p.Rating
-			ratingCount++
-		}
-
-		if recentCount == 0 {
-			continue
-		}
-
-		avgRating := 0.0
-		if ratingCount > 0 {
-			avgRating = ratingSum / float64(ratingCount)
-		}
-
-		entries = append(entries, trendEntry{
-			programID:          prog.ID,
-			title:              prog.Title,
-			stationID:          prog.StationID,
-			cast:               prog.Cast,
-			recentReviewsCount: recentCount,
-			avgRating:          avgRating,
-		})
-	}
-
-	// recent_reviews_count 降順、avg_rating 降順でソート
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].recentReviewsCount != entries[j].recentReviewsCount {
-			return entries[i].recentReviewsCount > entries[j].recentReviewsCount
-		}
-		return entries[i].avgRating > entries[j].avgRating
-	})
-
-	if len(entries) > limit {
-		entries = entries[:limit]
-	}
-
-	result := make([]map[string]interface{}, 0, len(entries))
-	for _, e := range entries {
+	result := make([]map[string]interface{}, 0, len(summaries))
+	for _, e := range summaries {
 		m := map[string]interface{}{
-			"id":                   e.programID,
-			"title":                e.title,
-			"station_id":           e.stationID,
-			"avg_rating":           fmt.Sprintf("%.1f", e.avgRating),
-			"recent_reviews_count": e.recentReviewsCount,
+			"id":                   e.ID,
+			"title":                e.Title,
+			"station_id":           e.StationID,
+			"avg_rating":           fmt.Sprintf("%.1f", e.AvgRating),
+			"recent_reviews_count": e.RecentHighCount,
 		}
-		if e.cast != "" {
-			m["cast"] = e.cast
+		if e.Cast != "" {
+			m["cast"] = e.Cast
 		}
 		result = append(result, m)
 	}
-
 	log.Printf("RecommendationService.GetTrendingPrograms: days=%d count=%d", days, len(result))
 	return result, nil
 }
@@ -211,7 +148,7 @@ func (s *RecommendationService) extractKeywords(userID int64) ([]string, error) 
 	}
 	for _, fav := range favs {
 		for _, word := range cleanTitle(fav.ProgramTitle) {
-			wordCount[word]++
+			wordCount[word] += 2 // お気に入りは2倍の重み
 		}
 	}
 
@@ -330,6 +267,20 @@ func (s *RecommendationService) findSimilarPrograms(keywords []string) ([]map[st
 		entries = entries[:recommendationLimit]
 	}
 
+	// ステーション多様性: 各ステーション最大2件
+	stationCount := make(map[string]int)
+	diverse := entries[:0]
+	for _, e := range entries {
+		if stationCount[e.stationID] < 2 {
+			diverse = append(diverse, e)
+			stationCount[e.stationID]++
+		}
+		if len(diverse) >= recommendationLimit {
+			break
+		}
+	}
+	entries = diverse
+
 	result := make([]map[string]interface{}, 0, len(entries))
 	for _, e := range entries {
 		m := map[string]interface{}{
@@ -349,69 +300,24 @@ func (s *RecommendationService) findSimilarPrograms(keywords []string) ([]map[st
 
 // getPopularPrograms は全期間で評価の高い人気番組を返す。
 func (s *RecommendationService) getPopularPrograms(limit int) ([]map[string]interface{}, error) {
-	allPrograms, err := s.programRepo.FindAll(200, 0)
+	summaries, err := s.programRepo.FindPopularSummary(1, limit)
 	if err != nil {
-		return nil, fmt.Errorf("RecommendationService.getPopularPrograms FindAll: %w", err)
+		return nil, fmt.Errorf("RecommendationService.getPopularPrograms: %w", err)
 	}
-
-	type popularEntry struct {
-		id        int64
-		title     string
-		stationID string
-		cast      string
-		avgRating float64
-		reviews   int
-	}
-
-	var entries []popularEntry
-	for _, prog := range allPrograms {
-		posts, err := s.postRepo.FindByProgram(prog.StationID, prog.Title, 100, 0)
-		if err != nil || len(posts) < 1 {
-			continue
-		}
-		var sum float64
-		for _, p := range posts {
-			sum += p.Rating
-		}
-		avg := sum / float64(len(posts))
-
-		entries = append(entries, popularEntry{
-			id:        prog.ID,
-			title:     prog.Title,
-			stationID: prog.StationID,
-			cast:      prog.Cast,
-			avgRating: avg,
-			reviews:   len(posts),
-		})
-	}
-
-	// 平均評価降順、レビュー数降順でソート
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].avgRating != entries[j].avgRating {
-			return entries[i].avgRating > entries[j].avgRating
-		}
-		return entries[i].reviews > entries[j].reviews
-	})
-
-	if len(entries) > limit {
-		entries = entries[:limit]
-	}
-
-	result := make([]map[string]interface{}, 0, len(entries))
-	for _, e := range entries {
+	result := make([]map[string]interface{}, 0, len(summaries))
+	for _, e := range summaries {
 		m := map[string]interface{}{
-			"id":            e.id,
-			"title":         e.title,
-			"station_id":    e.stationID,
-			"avg_rating":    fmt.Sprintf("%.1f", e.avgRating),
-			"reviews_count": e.reviews,
+			"id":            e.ID,
+			"title":         e.Title,
+			"station_id":    e.StationID,
+			"avg_rating":    fmt.Sprintf("%.1f", e.AvgRating),
+			"reviews_count": e.ReviewsCount,
 		}
-		if e.cast != "" {
-			m["cast"] = e.cast
+		if e.Cast != "" {
+			m["cast"] = e.Cast
 		}
 		result = append(result, m)
 	}
-
 	log.Printf("RecommendationService.getPopularPrograms: count=%d", len(result))
 	return result, nil
 }
