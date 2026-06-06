@@ -12,17 +12,17 @@ import (
 
 // FavoriteHandler はお気に入り番組関連の HTTP ハンドラーを管理する。
 type FavoriteHandler struct {
-	favService   service.FavoriteServiceInterface
+	favService    service.FavoriteServiceInterface
 	radikoService service.RadikoApiServiceInterface
-	store        sessions.Store
+	store         sessions.Store
 }
 
 // NewFavoriteHandler は新しい FavoriteHandler を返す。
 func NewFavoriteHandler(favService service.FavoriteServiceInterface, radikoService service.RadikoApiServiceInterface, store sessions.Store) *FavoriteHandler {
 	return &FavoriteHandler{
-		favService:   favService,
+		favService:    favService,
 		radikoService: radikoService,
-		store:        store,
+		store:         store,
 	}
 }
 

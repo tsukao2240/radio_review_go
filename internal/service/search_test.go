@@ -258,7 +258,7 @@ func TestGetAllPrograms(t *testing.T) {
 		repoErr := errors.New("findall error")
 		repo := &stubProgramRepo{
 			countAllFunc: func() (int, error) { return 3, nil },
-			findAllFunc: func(_, _ int) ([]model.RadioProgram, error) { return nil, repoErr },
+			findAllFunc:  func(_, _ int) ([]model.RadioProgram, error) { return nil, repoErr },
 		}
 		svc := &RadioProgramSearchService{repo: repo, redis: nil}
 		_, _, err := svc.GetAllPrograms(10, 1)

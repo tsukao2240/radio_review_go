@@ -10,19 +10,19 @@ import (
 // --- stub: PostRepository ---
 
 type stubPostRepo struct {
-	findAllFunc      func(limit, offset int) ([]model.Post, error)
-	countFunc        func() (int, error)
-	findByProgramFunc func(stationID, programTitle string, limit, offset int) ([]model.Post, error)
+	findAllFunc        func(limit, offset int) ([]model.Post, error)
+	countFunc          func() (int, error)
+	findByProgramFunc  func(stationID, programTitle string, limit, offset int) ([]model.Post, error)
 	countByProgramFunc func(stationID, programTitle string) (int, error)
-	findByUserFunc   func(userID int64, limit, offset int) ([]model.Post, error)
-	countByUserFunc  func(userID int64) (int, error)
-	findByIDFunc     func(id int64) (*model.Post, error)
-	findFilteredFunc func(filters map[string]interface{}, limit, offset int) ([]model.Post, error)
-	countFilteredFunc func(filters map[string]interface{}) (int, error)
-	createFunc       func(post *model.Post) (int64, error)
-	updateFunc       func(post *model.Post) error
-	deleteFunc       func(id int64) error
-	avgRatingFunc    func(programID int64) (float64, error)
+	findByUserFunc     func(userID int64, limit, offset int) ([]model.Post, error)
+	countByUserFunc    func(userID int64) (int, error)
+	findByIDFunc       func(id int64) (*model.Post, error)
+	findFilteredFunc   func(filters map[string]interface{}, limit, offset int) ([]model.Post, error)
+	countFilteredFunc  func(filters map[string]interface{}) (int, error)
+	createFunc         func(post *model.Post) (int64, error)
+	updateFunc         func(post *model.Post) error
+	deleteFunc         func(id int64) error
+	avgRatingFunc      func(programID int64) (float64, error)
 }
 
 func (r *stubPostRepo) FindAll(limit, offset int) ([]model.Post, error) {
@@ -107,9 +107,9 @@ func (r *stubPostRepo) AverageRating(programID int64) (float64, error) {
 // --- stub: PostTagRepository ---
 
 type stubTagRepo struct {
-	findAllFunc       func() ([]model.PostTag, error)
-	findByPostIDFunc  func(postID int64) ([]model.PostTag, error)
-	attachToPostFunc  func(postID, tagID int64) error
+	findAllFunc        func() ([]model.PostTag, error)
+	findByPostIDFunc   func(postID int64) ([]model.PostTag, error)
+	attachToPostFunc   func(postID, tagID int64) error
 	detachFromPostFunc func(postID, tagID int64) error
 }
 

@@ -9,12 +9,12 @@ import (
 )
 
 type stubScheduleRepo struct {
-	findByUserFunc      func(userID int64) ([]model.RecordingSchedule, error)
-	findByIDFunc        func(id int64) (*model.RecordingSchedule, error)
-	findPendingFunc     func(t string) ([]model.RecordingSchedule, error)
-	createFunc          func(s *model.RecordingSchedule) (int64, error)
-	updateStatusFunc    func(id int64, status string, errMsg *string) error
-	cancelFunc          func(id int64) error
+	findByUserFunc   func(userID int64) ([]model.RecordingSchedule, error)
+	findByIDFunc     func(id int64) (*model.RecordingSchedule, error)
+	findPendingFunc  func(t string) ([]model.RecordingSchedule, error)
+	createFunc       func(s *model.RecordingSchedule) (int64, error)
+	updateStatusFunc func(id int64, status string, errMsg *string) error
+	cancelFunc       func(id int64) error
 }
 
 func (r *stubScheduleRepo) FindByUser(userID int64) ([]model.RecordingSchedule, error) {

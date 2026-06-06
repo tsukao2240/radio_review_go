@@ -14,7 +14,7 @@ import (
 
 type stubNotifService struct {
 	getUnreadFunc   func(userID int64) ([]model.Notification, error)
-	getAllFunc       func(userID int64) ([]model.Notification, error)
+	getAllFunc      func(userID int64) ([]model.Notification, error)
 	markAsReadFunc  func(id, userID int64) error
 	markAllReadFunc func(userID int64) error
 }

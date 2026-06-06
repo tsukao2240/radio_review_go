@@ -8,10 +8,10 @@ import (
 )
 
 type stubNotifRepo struct {
-	findUnreadFunc    func(userID int64) ([]model.Notification, error)
-	findAllFunc       func(userID int64) ([]model.Notification, error)
-	markAsReadFunc    func(id, userID int64) error
-	markAllReadFunc   func(userID int64) error
+	findUnreadFunc  func(userID int64) ([]model.Notification, error)
+	findAllFunc     func(userID int64) ([]model.Notification, error)
+	markAsReadFunc  func(id, userID int64) error
+	markAllReadFunc func(userID int64) error
 }
 
 func (r *stubNotifRepo) FindUnreadByUser(userID int64) ([]model.Notification, error) {
