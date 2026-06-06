@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/gorilla/sessions"
-	"golang.org/x/crypto/bcrypt"
 	"github.com/yourname/radio_review_go/internal/model"
 	"github.com/yourname/radio_review_go/internal/repository"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // stubUserRepo は UserRepositoryInterface のスタブ実装。

@@ -98,11 +98,11 @@ func (r *RadioProgramRepository) FindPopularSummary(minReviews, limit int) ([]mo
 	var results []model.ProgramSummary
 	err := r.db.Select(&results, `
 		SELECT rp.id, rp.station_id, rp.title, COALESCE(rp.cast, '') AS cast,
-		       AVG(p.rating) AS avg_rating,
-		       COUNT(p.id) AS reviews_count,
+		       COALESCE(AVG(p.rating), 0) AS avg_rating,
+		       COUNT(CASE WHEN p.id IS NOT NULL THEN 1 END) AS reviews_count,
 		       0 AS recent_high_count
 		FROM radio_programs rp
-		INNER JOIN posts p ON p.program_id = rp.id
+		LEFT JOIN posts p ON p.program_id = rp.id
 		GROUP BY rp.id, rp.station_id, rp.title, rp.cast
 		HAVING reviews_count >= ?
 		ORDER BY avg_rating DESC, reviews_count DESC
@@ -110,6 +110,31 @@ func (r *RadioProgramRepository) FindPopularSummary(minReviews, limit int) ([]mo
 	`, minReviews, limit)
 	if err != nil {
 		return nil, fmt.Errorf("repository.FindPopularSummary: %w", err)
+	}
+	return results, nil
+}
+
+func (r *RadioProgramRepository) FindSummaryByIDs(ids []int64) ([]model.ProgramSummary, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query, args, err := sqlx.In(`
+		SELECT rp.id, rp.station_id, rp.title, COALESCE(rp.cast, '') AS cast,
+		       COALESCE(AVG(p.rating), 0) AS avg_rating,
+		       COUNT(CASE WHEN p.id IS NOT NULL THEN 1 END) AS reviews_count,
+		       0 AS recent_high_count
+		FROM radio_programs rp
+		LEFT JOIN posts p ON p.program_id = rp.id
+		WHERE rp.id IN (?)
+		GROUP BY rp.id, rp.station_id, rp.title, rp.cast
+	`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("repository.FindSummaryByIDs: %w", err)
+	}
+	query = r.db.Rebind(query)
+	var results []model.ProgramSummary
+	if err := r.db.Select(&results, query, args...); err != nil {
+		return nil, fmt.Errorf("repository.FindSummaryByIDs: %w", err)
 	}
 	return results, nil
 }

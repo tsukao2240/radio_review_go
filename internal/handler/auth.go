@@ -138,14 +138,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// バリデーション: 必須チェック
 	if name == "" || email == "" || password == "" || passwordConfirmation == "" {
-		SetFlash(r, w,"name, email, password, password_confirmation は必須です")
+		SetFlash(r, w, "name, email, password, password_confirmation は必須です")
 		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
 
 	// バリデーション: パスワード一致確認
 	if password != passwordConfirmation {
-		SetFlash(r, w,"パスワードと確認用パスワードが一致しません")
+		SetFlash(r, w, "パスワードと確認用パスワードが一致しません")
 		http.Redirect(w, r, "/register", http.StatusFound)
 		return
 	}
@@ -166,7 +166,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.userRepo.Create(user)
 	if err != nil {
 		if strings.Contains(err.Error(), "1062") || strings.Contains(err.Error(), "Duplicate entry") {
-			SetFlash(r, w,"このメールアドレスはすでに登録されています")
+			SetFlash(r, w, "このメールアドレスはすでに登録されています")
 			http.Redirect(w, r, "/register", http.StatusFound)
 			return
 		}
