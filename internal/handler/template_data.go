@@ -71,7 +71,7 @@ func getAndClearFlash(r *http.Request, w http.ResponseWriter) string {
 	return msg
 }
 
-// generateCSRFToken はリクエストごとにランダムな CSRF トークンを生成する。
+// generateCSRFToken はテスト用を含むランダムな CSRF トークンを生成する。
 func generateCSRFToken() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -126,6 +126,9 @@ func RenderWithBase(w http.ResponseWriter, r *http.Request, tmplPath string, dat
 
 	nonce := appmiddleware.GetNonce(r.Context())
 	csrfToken := generateCSRFToken()
+	if FlashStore != nil {
+		csrfToken = appmiddleware.EnsureCSRFToken(r, w, FlashStore)
+	}
 
 	td := TemplateData{
 		User:      user,

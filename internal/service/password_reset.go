@@ -30,6 +30,7 @@ type PasswordResetServiceInterface interface {
 type PasswordResetService struct {
 	resetRepo repository.PasswordResetRepositoryInterface
 	userRepo  repository.UserRepositoryInterface
+	mailer    Mailer
 }
 
 // NewPasswordResetService は新しい PasswordResetService を返す。
@@ -37,9 +38,22 @@ func NewPasswordResetService(
 	resetRepo repository.PasswordResetRepositoryInterface,
 	userRepo repository.UserRepositoryInterface,
 ) *PasswordResetService {
+	return NewPasswordResetServiceWithMailer(resetRepo, userRepo, &LogMailer{})
+}
+
+// NewPasswordResetServiceWithMailer は Mailer を注入して新しい PasswordResetService を返す。
+func NewPasswordResetServiceWithMailer(
+	resetRepo repository.PasswordResetRepositoryInterface,
+	userRepo repository.UserRepositoryInterface,
+	mailer Mailer,
+) *PasswordResetService {
+	if mailer == nil {
+		mailer = &LogMailer{}
+	}
 	return &PasswordResetService{
 		resetRepo: resetRepo,
 		userRepo:  userRepo,
+		mailer:    mailer,
 	}
 }
 
@@ -63,13 +77,15 @@ func (s *PasswordResetService) SendResetLink(email string) error {
 		return fmt.Errorf("トークン保存エラー: %w", err)
 	}
 
-	// メール送信（MAIL_MAILER=log 相当: ログ出力のみ）
 	appURL := os.Getenv("APP_URL")
 	if appURL == "" {
 		appURL = "http://localhost:8080"
 	}
 	resetURL := fmt.Sprintf("%s/password/reset/%s?email=%s", appURL, token, email)
-	log.Printf("[Mail] To: %s | Subject: パスワードリセット | URL: %s", email, resetURL)
+	body := fmt.Sprintf("以下のURLからパスワードを再設定してください。\n\n%s\n\nこのリンクの有効期限は60分です。", resetURL)
+	if err := s.mailer.Send(email, "パスワードリセット", body); err != nil {
+		return fmt.Errorf("メール送信エラー: %w", err)
+	}
 
 	return nil
 }

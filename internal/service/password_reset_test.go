@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,25 @@ func TestPasswordResetService_SendResetLink(t *testing.T) {
 		}
 		if len(savedToken) != 64 { // 32 bytes = 64 hex chars
 			t.Errorf("got token length=%d, want 64", len(savedToken))
+		}
+	})
+
+	t.Run("Mailer 注入: リセットURLを送信する", func(t *testing.T) {
+		mailer := &captureMailer{}
+		userRepo := &stubUserRepo{
+			findByEmailFunc: func(email string) (*model.User, error) {
+				return &model.User{ID: 1, Email: email}, nil
+			},
+		}
+		svc := NewPasswordResetServiceWithMailer(&stubResetRepo{}, userRepo, mailer)
+		if err := svc.SendResetLink("user@example.com"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if mailer.to != "user@example.com" {
+			t.Fatalf("got to=%q", mailer.to)
+		}
+		if !strings.Contains(mailer.body, "/password/reset/") {
+			t.Fatalf("reset URL missing from body: %q", mailer.body)
 		}
 	})
 

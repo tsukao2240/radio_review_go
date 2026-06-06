@@ -10,7 +10,7 @@ RUN go build -o server cmd/server/main.go
 
 FROM alpine:latest
 
-RUN apk add --no-cache ffmpeg tzdata ca-certificates
+RUN apk add --no-cache ffmpeg tzdata ca-certificates wget
 ENV TZ=Asia/Tokyo
 
 WORKDIR /app

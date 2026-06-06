@@ -46,9 +46,9 @@ func main() {
 	rdb := mustConnectRedis()
 
 	// --- Session store ---
-	appKey := os.Getenv("APP_KEY")
-	if appKey == "" {
-		appKey = "change-me-in-production-32bytes!!"
+	appKey, err := resolveAppKey()
+	if err != nil {
+		log.Fatal(err)
 	}
 	store := sessions.NewCookieStore([]byte(appKey))
 	store.Options = &sessions.Options{
@@ -79,7 +79,7 @@ func main() {
 	notifSvc := service.NewNotificationService(notifRepo)
 	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
 	recommendSvc := service.NewRecommendationService(postRepo, programRepo, favRepo, rdb)
-	passwordResetSvc := service.NewPasswordResetService(passwordResetRepo, userRepo)
+	passwordResetSvc := service.NewPasswordResetServiceWithMailer(passwordResetRepo, userRepo, service.NewMailerFromEnv())
 
 	// --- Radiko client ---
 	keyPath := "storage/keys/radiko_auth_key.txt"
@@ -143,6 +143,7 @@ func main() {
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.SecurityHeaders)
+	r.Use(appmiddleware.CSRFProtection(store))
 
 	// 静的ファイル
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
@@ -161,8 +162,9 @@ func main() {
 		http.ServeFile(w, r, "web/static/offline.html")
 	})
 	r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r) // ファビコン未作成につき 404
+		http.ServeFile(w, r, "web/static/icons/icon-192x192.png")
 	})
+	r.Get("/healthz", healthzHandler(db, rdb))
 
 	// 認証（ログインは10回/分のレートリミット）
 	r.Get("/login", authHandler.ShowLogin)
@@ -273,9 +275,73 @@ func main() {
 		port = "8080"
 	}
 
+	srv := newHTTPServer(":"+port, r)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
 	log.Printf("server starting on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
-		log.Fatal(err)
+	select {
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	case <-ctx.Done():
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("server shutdown error: %v", err)
+		}
+		if err := <-errCh; err != nil && err != http.ErrServerClosed {
+			log.Printf("server error: %v", err)
+		}
+	}
+
+	if err := rdb.Close(); err != nil {
+		log.Printf("redis close error: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		log.Printf("db close error: %v", err)
+	}
+}
+
+func resolveAppKey() (string, error) {
+	appKey := os.Getenv("APP_KEY")
+	if appKey != "" {
+		return appKey, nil
+	}
+	if os.Getenv("APP_ENV") == "production" {
+		return "", fmt.Errorf("APP_KEY is required when APP_ENV=production")
+	}
+	return "change-me-in-production-32bytes!!", nil
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+}
+
+func healthzHandler(db *sqlx.DB, rdb *redis.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := db.PingContext(ctx); err != nil {
+			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			http.Error(w, "redis unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
 	}
 }
 

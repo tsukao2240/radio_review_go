@@ -100,6 +100,7 @@ go run cmd/server/main.go
 APP_KEY=<32文字以上のランダム文字列>
 APP_ENV=local
 APP_PORT=8080
+APP_URL=http://localhost:8080
 
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -112,6 +113,14 @@ REDIS_PORT=6379
 
 RECORDING_STORAGE_PATH=storage/recordings
 RECORDING_MAX_PARALLEL=10
+
+MAIL_MAILER=log
+MAIL_HOST=127.0.0.1
+MAIL_PORT=1025
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_FROM=no-reply@example.com
+MAIL_FROM_NAME=RadioProgram Review
 ```
 
 ## 開発コマンド

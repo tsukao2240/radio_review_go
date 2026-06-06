@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -41,13 +43,32 @@ func NewRecordingHandler(
 }
 
 // ownerKey はリクエストからオーナーキーを生成する。
-// ログイン済みなら "user_{id}"、ゲストなら "session_{sessionID}"。
-func (h *RecordingHandler) ownerKey(r *http.Request, store sessions.Store) string {
+// ログイン済みなら "user_{id}"、ゲストならセッションに保存したUUIDベースの "session_{guestID}"。
+func (h *RecordingHandler) ownerKey(r *http.Request, w http.ResponseWriter, store sessions.Store) (string, error) {
 	if userID, ok := middleware.GetUserID(r.Context()); ok {
-		return fmt.Sprintf("user_%d", userID)
+		return fmt.Sprintf("user_%d", userID), nil
 	}
-	session, _ := store.Get(r, "radio_review_session")
-	return fmt.Sprintf("session_%s", session.ID)
+	session, err := store.Get(r, "radio_review_session")
+	if err != nil {
+		return "", err
+	}
+	guestID, _ := session.Values["guest_owner_id"].(string)
+	if guestID == "" {
+		guestID = newGuestOwnerID()
+		session.Values["guest_owner_id"] = guestID
+		if err := session.Save(r, w); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("session_%s", guestID), nil
+}
+
+func newGuestOwnerID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 // saveRecordingInfo は RecordingInfo を Redis に JSON シリアライズして保存する。
@@ -135,7 +156,11 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 		fileName := fmt.Sprintf("%s_%s.aac", recordingID, safeProgName)
 		filePath := filepath.Join(h.storagePath, fileName)
 
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 
 		info := &model.RecordingInfo{
 			RecordingID: recordingID,
@@ -183,6 +208,7 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 		writeJSON(w, http.StatusOK, map[string]string{
 			"recording_id": recordingID,
 			"status":       "recording",
+			"success":      "true",
 		})
 	}
 }
@@ -209,7 +235,11 @@ func (h *RecordingHandler) StopRecording(store sessions.Store) http.HandlerFunc 
 			return
 		}
 
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 		if info.OwnerKey != ownerKey {
 			writeError(w, http.StatusForbidden, "アクセス権限がありません")
 			return
@@ -244,7 +274,11 @@ func (h *RecordingHandler) GetRecordingStatus(store sessions.Store) http.Handler
 			return
 		}
 
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 		if info.OwnerKey != ownerKey {
 			writeError(w, http.StatusForbidden, "アクセス権限がありません")
 			return
@@ -270,7 +304,11 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 			return
 		}
 
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 		if info.OwnerKey != ownerKey {
 			writeError(w, http.StatusForbidden, "アクセス権限がありません")
 			return
@@ -316,7 +354,11 @@ func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFun
 			return
 		}
 
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 		if info.OwnerKey != ownerKey {
 			writeError(w, http.StatusForbidden, "アクセス権限がありません")
 			return
@@ -388,7 +430,11 @@ func (h *RecordingHandler) listOwnerRecordings(ctx context.Context, ownerKey str
 // 自分の録音一覧を JSON で返す。
 func (h *RecordingHandler) ListRecordings(store sessions.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 
 		recordings, err := h.listOwnerRecordings(r.Context(), ownerKey)
 		if err != nil {
@@ -410,7 +456,11 @@ func (h *RecordingHandler) ListRecordings(store sessions.Store) http.HandlerFunc
 // 録音履歴を HTML テンプレートで返す。テンプレートが存在しない場合は JSON で代替する。
 func (h *RecordingHandler) ShowHistory(store sessions.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 
 		recordings, err := h.listOwnerRecordings(r.Context(), ownerKey)
 		if err != nil {
@@ -450,7 +500,11 @@ func (h *RecordingHandler) DeleteRecording(store sessions.Store) http.HandlerFun
 			return
 		}
 
-		ownerKey := h.ownerKey(r, store)
+		ownerKey, err := h.ownerKey(r, w, store)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			return
+		}
 		if info.OwnerKey != ownerKey {
 			writeError(w, http.StatusForbidden, "アクセス権限がありません")
 			return

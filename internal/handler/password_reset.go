@@ -2,6 +2,8 @@ package handler
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yourname/radio_review_go/internal/service"
@@ -42,8 +44,12 @@ func (h *PasswordResetHandler) SendResetLink(w http.ResponseWriter, r *http.Requ
 	// 存在しないメールでもエラーを返さない（列挙攻撃対策）
 	_ = h.svc.SendResetLink(email)
 
+	success := "パスワードリセットのリンクをメールで送信しました"
+	if strings.ToLower(os.Getenv("MAIL_MAILER")) != "smtp" {
+		success = "パスワードリセットのリンクをログに出力しました"
+	}
 	RenderWithBase(w, r, "web/templates/auth/passwords/email.html", map[string]interface{}{
-		"Success": "パスワードリセットのリンクをメールで送信しました（開発環境ではログに出力されています）",
+		"Success": success,
 	})
 }
 

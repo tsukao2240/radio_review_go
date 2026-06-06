@@ -124,6 +124,7 @@
   var stationId = btn.dataset.stationId;
   var programTitle = btn.dataset.title;
   var dateStr = btn.dataset.date || '';
+  var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
   // dateStr が "20060102" 形式の場合、曜日（0=月〜6=日）を算出
   function broadcastDayFromDate(s) {
     if (!s || s.length < 8) return null;
@@ -159,7 +160,10 @@
     if (bd !== null) payload.broadcast_day = bd;
     fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken
+      },
       body: JSON.stringify(payload)
     })
     .then(function(r) {
@@ -189,11 +193,14 @@
 
       fetch('/recording/timefree/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken
+        },
         body: JSON.stringify({
           station_id: sid,
           station_name: sid,
-          title: title,
+          program_name: title,
           cast: cast,
           start_time: date + start,
           end_time:   date + end

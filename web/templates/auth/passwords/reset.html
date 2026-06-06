@@ -17,6 +17,7 @@
     {{ end }}
 
     <form method="POST" action="/password/update">
+      <input type="hidden" name="_csrf" value="{{ $.CSRFToken }}">
       <input type="hidden" name="token" value="{{ index . "Token" }}">
       <input type="hidden" name="email" value="{{ index . "Email" }}">
 

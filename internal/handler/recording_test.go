@@ -127,6 +127,55 @@ func TestStartTimefreeRecording_Success(t *testing.T) {
 	}
 }
 
+func TestRecordingOwnerKey_GuestStableInSession(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test-secret-32-bytes-long"))
+
+	req1 := httptest.NewRequest(http.MethodGet, "/recording/list", nil)
+	rr1 := httptest.NewRecorder()
+	key1, err := h.ownerKey(req1, rr1, store)
+	if err != nil {
+		t.Fatalf("ownerKey: %v", err)
+	}
+	if key1 == "session_" {
+		t.Fatal("guest owner key is empty")
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/recording/list", nil)
+	for _, c := range rr1.Result().Cookies() {
+		req2.AddCookie(c)
+	}
+	rr2 := httptest.NewRecorder()
+	key2, err := h.ownerKey(req2, rr2, store)
+	if err != nil {
+		t.Fatalf("ownerKey second call: %v", err)
+	}
+	if key1 != key2 {
+		t.Fatalf("guest owner key changed: %q != %q", key1, key2)
+	}
+}
+
+func requestWithGuestOwner(t *testing.T, method, target string, store sessions.Store, ownerID string) *http.Request {
+	t.Helper()
+	setupReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	setupRR := httptest.NewRecorder()
+	session, err := store.Get(setupReq, "radio_review_session")
+	if err != nil {
+		t.Fatalf("store.Get: %v", err)
+	}
+	session.Values["guest_owner_id"] = ownerID
+	if err := session.Save(setupReq, setupRR); err != nil {
+		t.Fatalf("session.Save: %v", err)
+	}
+
+	req := httptest.NewRequest(method, target, nil)
+	for _, c := range setupRR.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	return req
+}
+
 func TestStopRecording_InvalidJSON(t *testing.T) {
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
@@ -535,7 +584,11 @@ func TestOwnerKey_WithUserID(t *testing.T) {
 	store := sessions.NewCookieStore([]byte("test"))
 
 	req := withUserID(httptest.NewRequest(http.MethodGet, "/", nil), 42)
-	key := h.ownerKey(req, store)
+	rr := httptest.NewRecorder()
+	key, err := h.ownerKey(req, rr, store)
+	if err != nil {
+		t.Fatalf("ownerKey: %v", err)
+	}
 	if key != "user_42" {
 		t.Errorf("expected user_42, got %q", key)
 	}
@@ -547,7 +600,11 @@ func TestOwnerKey_GuestSession(t *testing.T) {
 	store := sessions.NewCookieStore([]byte("test"))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	key := h.ownerKey(req, store)
+	rr := httptest.NewRecorder()
+	key, err := h.ownerKey(req, rr, store)
+	if err != nil {
+		t.Fatalf("ownerKey: %v", err)
+	}
 	if len(key) == 0 {
 		t.Error("expected non-empty owner key for guest")
 	}
@@ -640,13 +697,13 @@ func TestStreamRecording_NotCompleted(t *testing.T) {
 	info := &model.RecordingInfo{
 		RecordingID: "test123",
 		Status:      "recording",
-		OwnerKey:    "session_",
+		OwnerKey:    "session_guest123",
 		FilePath:    "/tmp/test.aac",
 	}
 	data, _ := json.Marshal(info)
 	rdb.Set(context.Background(), "recording_test123", string(data), 0)
 
-	req := httptest.NewRequest(http.MethodGet, "/recording/stream?recording_id=test123", nil)
+	req := requestWithGuestOwner(t, http.MethodGet, "/recording/stream?recording_id=test123", store, "guest123")
 	w := httptest.NewRecorder()
 	h.StreamRecording(store)(w, req)
 
@@ -693,14 +750,14 @@ func TestStreamRecording_CompletedServesFile(t *testing.T) {
 	info := &model.RecordingInfo{
 		RecordingID: "test456",
 		Status:      "completed",
-		OwnerKey:    "session_",
+		OwnerKey:    "session_guest456",
 		FilePath:    filePath,
 		ProgramName: "テスト番組",
 	}
 	data, _ := json.Marshal(info)
 	rdb.Set(context.Background(), "recording_test456", string(data), 0)
 
-	req := httptest.NewRequest(http.MethodGet, "/recording/stream?recording_id=test456", nil)
+	req := requestWithGuestOwner(t, http.MethodGet, "/recording/stream?recording_id=test456", store, "guest456")
 	w := httptest.NewRecorder()
 	h.StreamRecording(store)(w, req)
 
