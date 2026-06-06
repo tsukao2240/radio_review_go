@@ -19,6 +19,9 @@ type stubProgramRepo struct {
 	findAllFunc               func(limit, offset int) ([]model.RadioProgram, error)
 	findByStationAndTitleFunc func(stationID, title string) (*model.RadioProgram, error)
 	upsertFunc                func(program *model.RadioProgram) (int64, error)
+	findPopularSummaryFunc    func(minReviews, limit int) ([]model.ProgramSummary, error)
+	findSummaryByIDsFunc      func(ids []int64) ([]model.ProgramSummary, error)
+	findTrendingSummaryFunc   func(cutoff time.Time, limit int) ([]model.ProgramSummary, error)
 }
 
 func (r *stubProgramRepo) FindByID(id int64) (*model.RadioProgram, error) { return nil, nil }
@@ -58,6 +61,27 @@ func (r *stubProgramRepo) Upsert(p *model.RadioProgram) (int64, error) {
 		return r.upsertFunc(p)
 	}
 	return 1, nil
+}
+
+func (r *stubProgramRepo) FindPopularSummary(minReviews, limit int) ([]model.ProgramSummary, error) {
+	if r.findPopularSummaryFunc != nil {
+		return r.findPopularSummaryFunc(minReviews, limit)
+	}
+	return nil, nil
+}
+
+func (r *stubProgramRepo) FindSummaryByIDs(ids []int64) ([]model.ProgramSummary, error) {
+	if r.findSummaryByIDsFunc != nil {
+		return r.findSummaryByIDsFunc(ids)
+	}
+	return nil, nil
+}
+
+func (r *stubProgramRepo) FindTrendingSummary(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
+	if r.findTrendingSummaryFunc != nil {
+		return r.findTrendingSummaryFunc(cutoff, limit)
+	}
+	return nil, nil
 }
 
 func TestSearchForAPI_NilKeywordAndCast(t *testing.T) {

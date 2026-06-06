@@ -58,33 +58,16 @@ func TestCleanTitle(t *testing.T) {
 
 func TestRecommendationService_GetTrendingPrograms(t *testing.T) {
 	t.Run("高評価レビューが多い番組を返す", func(t *testing.T) {
-		recent := time.Now().Add(-1 * time.Hour) // 1時間前
-
 		programRepo := &stubProgramRepo{
-			findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
-				return []model.RadioProgram{
-					{ID: 1, StationID: "TBS", Title: "jazz show"},
-					{ID: 2, StationID: "LFR", Title: "news program"},
-				}, nil
-			},
-		}
-		postRepo := &stubPostRepo{
-			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
-				if programTitle == "jazz show" {
-					return []model.Post{
-						{ID: 1, Rating: 5.0, CreatedAt: recent},
-						{ID: 2, Rating: 4.5, CreatedAt: recent},
-					}, nil
-				}
-				// news program は高評価なし
-				return []model.Post{
-					{ID: 3, Rating: 2.0, CreatedAt: recent},
+			findTrendingSummaryFunc: func(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
+				return []model.ProgramSummary{
+					{ID: 1, StationID: "TBS", Title: "jazz show", AvgRating: 4.75, ReviewsCount: 2, RecentHighCount: 2},
 				}, nil
 			},
 		}
 
 		svc := &RecommendationService{
-			postRepo:    postRepo,
+			postRepo:    &stubPostRepo{},
 			programRepo: programRepo,
 			favRepo:     &stubFavRepo{},
 			redis:       nil,
@@ -95,7 +78,7 @@ func TestRecommendationService_GetTrendingPrograms(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(result) != 1 {
-			t.Errorf("got %d results, want 1 (only jazz show)", len(result))
+			t.Errorf("got %d results, want 1", len(result))
 			return
 		}
 		if result[0]["title"] != "jazz show" {
@@ -107,25 +90,22 @@ func TestRecommendationService_GetTrendingPrograms(t *testing.T) {
 	})
 
 	t.Run("limit が適用される", func(t *testing.T) {
-		recent := time.Now().Add(-1 * time.Hour)
-		programs := make([]model.RadioProgram, 5)
-		for i := range programs {
-			programs[i] = model.RadioProgram{ID: int64(i + 1), StationID: "TBS", Title: "program"}
+		summaries := make([]model.ProgramSummary, 5)
+		for i := range summaries {
+			summaries[i] = model.ProgramSummary{ID: int64(i + 1), StationID: "TBS", Title: "program", AvgRating: 4.0, RecentHighCount: 1}
 		}
 
 		programRepo := &stubProgramRepo{
-			findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
-				return programs, nil
-			},
-		}
-		postRepo := &stubPostRepo{
-			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
-				return []model.Post{{ID: 1, Rating: 5.0, CreatedAt: recent}}, nil
+			findTrendingSummaryFunc: func(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
+				if limit < len(summaries) {
+					return summaries[:limit], nil
+				}
+				return summaries, nil
 			},
 		}
 
 		svc := &RecommendationService{
-			postRepo:    postRepo,
+			postRepo:    &stubPostRepo{},
 			programRepo: programRepo,
 			favRepo:     &stubFavRepo{},
 			redis:       nil,
@@ -140,26 +120,15 @@ func TestRecommendationService_GetTrendingPrograms(t *testing.T) {
 		}
 	})
 
-	t.Run("期間外のレビューは除外される", func(t *testing.T) {
-		old := time.Now().Add(-30 * 24 * time.Hour) // 30日前
-
+	t.Run("結果が空の場合は空スライスを返す", func(t *testing.T) {
 		programRepo := &stubProgramRepo{
-			findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
-				return []model.RadioProgram{
-					{ID: 1, StationID: "TBS", Title: "old show"},
-				}, nil
-			},
-		}
-		postRepo := &stubPostRepo{
-			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
-				return []model.Post{
-					{ID: 1, Rating: 5.0, CreatedAt: old}, // 7日前の範囲外
-				}, nil
+			findTrendingSummaryFunc: func(cutoff time.Time, limit int) ([]model.ProgramSummary, error) {
+				return nil, nil
 			},
 		}
 
 		svc := &RecommendationService{
-			postRepo:    postRepo,
+			postRepo:    &stubPostRepo{},
 			programRepo: programRepo,
 			favRepo:     &stubFavRepo{},
 			redis:       nil,
@@ -170,7 +139,7 @@ func TestRecommendationService_GetTrendingPrograms(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(result) != 0 {
-			t.Errorf("got %d results, want 0 (all reviews too old)", len(result))
+			t.Errorf("got %d results, want 0", len(result))
 		}
 	})
 }
@@ -256,23 +225,15 @@ func TestFindSimilarPrograms(t *testing.T) {
 					{ID: 2, StationID: "LFR", Title: "ジャズ特集"},
 				}, nil
 			},
-		}
-		postRepo := &stubPostRepo{
-			avgRatingFunc: func(programID int64) (float64, error) {
-				if programID == 1 {
-					return 4.8, nil
-				}
-				return 3.5, nil
-			},
-			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
-				if programTitle == "ジャズナイト" {
-					return []model.Post{{ID: 1}, {ID: 2}}, nil
-				}
-				return []model.Post{{ID: 3}}, nil
+			findSummaryByIDsFunc: func(ids []int64) ([]model.ProgramSummary, error) {
+				return []model.ProgramSummary{
+					{ID: 1, StationID: "TBS", Title: "ジャズナイト", AvgRating: 4.8, ReviewsCount: 2},
+					{ID: 2, StationID: "LFR", Title: "ジャズ特集", AvgRating: 3.5, ReviewsCount: 1},
+				}, nil
 			},
 		}
 		svc := &RecommendationService{
-			postRepo:    postRepo,
+			postRepo:    &stubPostRepo{},
 			programRepo: programRepo,
 			favRepo:     &stubFavRepo{},
 			redis:       nil,
@@ -294,24 +255,16 @@ func TestFindSimilarPrograms(t *testing.T) {
 func TestRecommendationService_GetPopularPrograms(t *testing.T) {
 	t.Run("平均評価の高い番組を返す", func(t *testing.T) {
 		programRepo := &stubProgramRepo{
-			findAllFunc: func(limit, offset int) ([]model.RadioProgram, error) {
-				return []model.RadioProgram{
-					{ID: 1, StationID: "TBS", Title: "top show"},
-					{ID: 2, StationID: "LFR", Title: "low show"},
+			findPopularSummaryFunc: func(minReviews, limit int) ([]model.ProgramSummary, error) {
+				return []model.ProgramSummary{
+					{ID: 1, StationID: "TBS", Title: "top show", AvgRating: 4.75, ReviewsCount: 2},
+					{ID: 2, StationID: "LFR", Title: "low show", AvgRating: 2.0, ReviewsCount: 1},
 				}, nil
-			},
-		}
-		postRepo := &stubPostRepo{
-			findByProgramFunc: func(stationID, programTitle string, limit, offset int) ([]model.Post, error) {
-				if programTitle == "top show" {
-					return []model.Post{{Rating: 5.0}, {Rating: 4.5}}, nil
-				}
-				return []model.Post{{Rating: 2.0}}, nil
 			},
 		}
 
 		svc := &RecommendationService{
-			postRepo:    postRepo,
+			postRepo:    &stubPostRepo{},
 			programRepo: programRepo,
 			favRepo:     &stubFavRepo{},
 			redis:       nil,
@@ -490,6 +443,11 @@ func TestRecommendationService_BuildRecommendations_WithKeywords(t *testing.T) {
 		searchByTitleFunc: func(keyword string, limit, offset int) ([]model.RadioProgram, error) {
 			return []model.RadioProgram{
 				{ID: 10, StationID: "TBS", Title: "ジャズ特集"},
+			}, nil
+		},
+		findSummaryByIDsFunc: func(ids []int64) ([]model.ProgramSummary, error) {
+			return []model.ProgramSummary{
+				{ID: 10, StationID: "TBS", Title: "ジャズ特集", AvgRating: 4.0, ReviewsCount: 1},
 			}, nil
 		},
 	}

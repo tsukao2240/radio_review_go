@@ -122,6 +122,18 @@ type Notification struct {
 	UpdatedAt time.Time  `db:"updated_at"`
 }
 
+// ProgramSummary はレコメンド/トレンド集計用の軽量番組情報。
+// radio_programs と posts の JOIN 集計結果をマッピングする。
+type ProgramSummary struct {
+	ID              int64   `db:"id"`
+	StationID       string  `db:"station_id"`
+	Title           string  `db:"title"`
+	Cast            string  `db:"cast"`
+	AvgRating       float64 `db:"avg_rating"`
+	ReviewsCount    int     `db:"reviews_count"`
+	RecentHighCount int     `db:"recent_high_count"`
+}
+
 // RecordingInfo - Redisに保存する録音情報（JSONシリアライズ）
 type RecordingInfo struct {
 	RecordingID string `json:"recording_id"`
