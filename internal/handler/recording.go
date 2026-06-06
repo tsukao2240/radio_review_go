@@ -289,6 +289,51 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 	}
 }
 
+// StreamRecording は GET /recording/stream を処理する。
+// 録音ファイルを audio/aac で返し、Range リクエストによるシークを可能にする。
+func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		recordingID := r.URL.Query().Get("recording_id")
+		if recordingID == "" {
+			writeError(w, http.StatusBadRequest, "recording_id は必須です")
+			return
+		}
+
+		info, err := h.loadRecordingInfo(r.Context(), recordingID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "録音情報が見つかりません")
+			return
+		}
+
+		ownerKey := h.ownerKey(r, store)
+		if info.OwnerKey != ownerKey {
+			writeError(w, http.StatusForbidden, "アクセス権限がありません")
+			return
+		}
+
+		if info.Status != "completed" {
+			writeError(w, http.StatusBadRequest, "録音が完了していません (status: "+info.Status+")")
+			return
+		}
+
+		f, err := os.Open(info.FilePath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ファイルのオープンに失敗しました: "+err.Error())
+			return
+		}
+		defer f.Close()
+
+		stat, err := f.Stat()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ファイル情報の取得に失敗しました: "+err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "audio/aac")
+		http.ServeContent(w, r, info.ProgramName+".aac", stat.ModTime(), f)
+	}
+}
+
 // listOwnerRecordings は自分の owner_key に一致する録音一覧を Redis SCAN で取得する。
 func (h *RecordingHandler) listOwnerRecordings(ctx context.Context, ownerKey string) ([]model.RecordingInfo, error) {
 	var cursor uint64
