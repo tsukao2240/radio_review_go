@@ -67,6 +67,7 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 	req1.Header.Set("X-Radiko-App", "pc_html5")
 	req1.Header.Set("X-Radiko-App-Version", "0.0.1")
 	req1.Header.Set("X-Radiko-User", "test-stream")
+	req1.Header.Set("X-Radiko-Device", "pc")
 
 	resp1, err := c.httpClient.Do(req1)
 	if err != nil {

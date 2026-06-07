@@ -85,6 +85,22 @@ func TestGetAuthToken_FullFlow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/api/auth1":
+			if r.Header.Get("X-Radiko-App") != "pc_html5" {
+				http.Error(w, "bad app", http.StatusBadRequest)
+				return
+			}
+			if r.Header.Get("X-Radiko-App-Version") != "0.0.1" {
+				http.Error(w, "bad app version", http.StatusBadRequest)
+				return
+			}
+			if r.Header.Get("X-Radiko-User") != "test-stream" {
+				http.Error(w, "bad user", http.StatusBadRequest)
+				return
+			}
+			if r.Header.Get("X-Radiko-Device") != "pc" {
+				http.Error(w, "bad device", http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("X-Radiko-AuthToken", "test-auth-token")
 			w.Header().Set("X-Radiko-KeyLength", "16")
 			w.Header().Set("X-Radiko-KeyOffset", "16")
