@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -184,13 +185,16 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 			ctx := context.Background()
 
 			// ストレージディレクトリを作成（存在しない場合）
-			_ = os.MkdirAll(h.storagePath, 0755)
+			if err := os.MkdirAll(h.storagePath, 0755); err != nil {
+				log.Printf("StartTimefreeRecording: mkdir storage failed recording_id=%s path=%s: %v", recordingID, h.storagePath, err)
+			}
 
 			dlErr := h.hlsDownloader.DownloadTimefree(ctx, authToken, req.StationID, req.StartTime, req.EndTime, filePath)
 
 			// ステータス更新
 			updated, loadErr := h.loadRecordingInfo(ctx, recordingID)
 			if loadErr != nil {
+				log.Printf("StartTimefreeRecording: load recording info failed recording_id=%s: %v", recordingID, loadErr)
 				return
 			}
 			if updated.Status == "stopped" {
@@ -199,10 +203,15 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 			}
 			if dlErr != nil {
 				updated.Status = "failed"
+				updated.FailReason = dlErr.Error()
+				log.Printf("StartTimefreeRecording: download failed recording_id=%s station_id=%s start=%s end=%s: %v", recordingID, req.StationID, req.StartTime, req.EndTime, dlErr)
 			} else {
 				updated.Status = "completed"
+				updated.FailReason = ""
 			}
-			_ = h.saveRecordingInfo(ctx, updated, 2*time.Hour)
+			if err := h.saveRecordingInfo(ctx, updated, 2*time.Hour); err != nil {
+				log.Printf("StartTimefreeRecording: save recording info failed recording_id=%s: %v", recordingID, err)
+			}
 		}()
 
 		writeJSON(w, http.StatusOK, map[string]string{

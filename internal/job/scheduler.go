@@ -520,14 +520,14 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		errMsg := fmt.Sprintf("録音エラー: %v", err)
 		log.Printf("[job] startScheduledRecording (id=%d): %s", sc.ID, errMsg)
 		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
-		_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed")
+		_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed", errMsg)
 		_ = createRecordingFailedNotification(s.db, sc, errMsg)
 		return
 	}
 
 	// 完了処理
 	_ = updateScheduleStatus(s.db, sc.ID, "completed", nil)
-	_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "completed")
+	_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "completed", "")
 	_ = createRecordingStartNotification(s.db, sc, recordingID)
 
 	log.Printf("[job] 録音完了: id=%d recording_id=%s", sc.ID, recordingID)
@@ -629,7 +629,7 @@ func saveRecordingInfo(ctx context.Context, rdb *redis.Client, recordingID strin
 }
 
 // updateRedisRecordingStatus は Redis に保存済みの RecordingInfo の status を更新する。
-func updateRedisRecordingStatus(ctx context.Context, rdb *redis.Client, recordingID, status string) error {
+func updateRedisRecordingStatus(ctx context.Context, rdb *redis.Client, recordingID, status, failReason string) error {
 	key := "recording_" + recordingID
 	raw, err := rdb.Get(ctx, key).Result()
 	if err != nil {
@@ -640,6 +640,7 @@ func updateRedisRecordingStatus(ctx context.Context, rdb *redis.Client, recordin
 		return fmt.Errorf("json.Unmarshal: %w", err)
 	}
 	info.Status = status
+	info.FailReason = failReason
 	b, err := json.Marshal(info)
 	if err != nil {
 		return fmt.Errorf("json.Marshal: %w", err)

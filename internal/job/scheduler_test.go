@@ -205,6 +205,45 @@ func TestSchedulerSweepOrphanRecordingFiles(t *testing.T) {
 	}
 }
 
+func TestUpdateRedisRecordingStatusStoresFailReason(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	info := model.RecordingInfo{
+		RecordingID: "rec-failed",
+		Status:      "recording",
+	}
+	b, _ := json.Marshal(info)
+	if err := rdb.Set(context.Background(), "recording_rec-failed", string(b), time.Hour).Err(); err != nil {
+		t.Fatalf("redis set: %v", err)
+	}
+
+	const reason = "録音エラー: playlist returned status 404"
+	if err := updateRedisRecordingStatus(context.Background(), rdb, "rec-failed", "failed", reason); err != nil {
+		t.Fatalf("updateRedisRecordingStatus: %v", err)
+	}
+
+	raw, err := rdb.Get(context.Background(), "recording_rec-failed").Result()
+	if err != nil {
+		t.Fatalf("redis get: %v", err)
+	}
+	var got model.RecordingInfo
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.Status != "failed" {
+		t.Fatalf("status = %q, want failed", got.Status)
+	}
+	if got.FailReason != reason {
+		t.Fatalf("fail_reason = %q, want %q", got.FailReason, reason)
+	}
+}
+
 func TestIsRecordingFilePathAllowed(t *testing.T) {
 	dir := t.TempDir()
 	if !isRecordingFilePathAllowed(dir, filepath.Join(dir, "ok.aac")) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -124,6 +125,70 @@ func TestStartTimefreeRecording_Success(t *testing.T) {
 	}
 	if resp["recording_id"] == "" {
 		t.Error("expected non-empty recording_id")
+	}
+}
+
+func TestStartTimefreeRecording_DownloadFailureStoresFailReason(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	dir, err := os.MkdirTemp("", "test-recording-fail-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		time.Sleep(50 * time.Millisecond)
+		os.RemoveAll(dir)
+	})
+
+	done := make(chan struct{})
+	downloadErr := errors.New("playlist returned status 404")
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{
+		downloadFunc: func(ctx context.Context, authToken, stationID, startTime, endTime, outputPath string) error {
+			defer close(done)
+			return downloadErr
+		},
+	}, rdb, dir)
+	store := sessions.NewCookieStore([]byte("test"))
+
+	body, _ := json.Marshal(map[string]string{
+		"station_id":   "TBS",
+		"start_time":   "202401011000",
+		"end_time":     "202401011100",
+		"program_name": "Jazz Show",
+	})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/timefree/start", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.StartTimefreeRecording(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200", rr.Code)
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for download goroutine")
+	}
+
+	var info *model.RecordingInfo
+	for i := 0; i < 20; i++ {
+		info, err = h.loadRecordingInfo(context.Background(), resp["recording_id"])
+		if err == nil && info.Status == "failed" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("loadRecordingInfo: %v", err)
+	}
+	if info.Status != "failed" {
+		t.Fatalf("status = %q, want failed", info.Status)
+	}
+	if info.FailReason != downloadErr.Error() {
+		t.Fatalf("fail_reason = %q, want %q", info.FailReason, downloadErr.Error())
 	}
 }
 

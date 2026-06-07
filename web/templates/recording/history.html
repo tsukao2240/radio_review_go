@@ -64,6 +64,12 @@
       <div class="text-sm text-gray-500 dark:text-gray-400">
         <i class="fas fa-spinner fa-spin mr-1"></i>録音中...
       </div>
+      {{ else if eq .Status "failed" }}
+      {{ if .FailReason }}
+      <div class="text-sm text-red-600 dark:text-red-400 break-words">
+        <i class="fas fa-exclamation-circle mr-1"></i>{{ .FailReason }}
+      </div>
+      {{ end }}
       {{ end }}
     </div>
     {{ end }}
@@ -126,7 +132,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                 statusEl.className = 'recording-status inline-flex items-center text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full font-medium';
                                 statusEl.textContent = data.status;
                             }
-                            if (actionEl) actionEl.remove();
+                            if (actionEl) {
+                                if (data.status === 'failed' && data.fail_reason) {
+                                    actionEl.className = 'text-sm text-red-600 dark:text-red-400 break-words';
+                                    actionEl.textContent = data.fail_reason;
+                                } else {
+                                    actionEl.remove();
+                                }
+                            }
                             if (window.toast) window.toast.error('録音に失敗しました');
                         }
                         card.removeAttribute('data-polling');
