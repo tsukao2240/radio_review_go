@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -55,6 +56,37 @@ func TestGetAuthToken_CacheHit(t *testing.T) {
 	}
 }
 
+func TestDecodeRadikoAuthKeyBase64(t *testing.T) {
+	raw := []byte("radiko auth key bytes")
+	padded := base64.StdEncoding.EncodeToString(raw)
+	unpadded := strings.TrimRight(padded, "=")
+	withWhitespace := "\n\t" + unpadded[:8] + " \r\n" + unpadded[8:] + "\n"
+	rawUnpadded := base64.RawStdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04, 0x05})
+
+	tests := []struct {
+		name    string
+		encoded string
+		want    []byte
+	}{
+		{name: "padded", encoded: padded, want: raw},
+		{name: "unpadded", encoded: unpadded, want: raw},
+		{name: "unpadded with whitespace", encoded: withWhitespace, want: raw},
+		{name: "raw unpadded len not multiple of 4", encoded: rawUnpadded, want: []byte{0x01, 0x02, 0x03, 0x04, 0x05}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decodeRadikoAuthKeyBase64([]byte(tt.encoded))
+			if err != nil {
+				t.Fatalf("decodeRadikoAuthKeyBase64: %v", err)
+			}
+			if string(got) != string(tt.want) {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // makeAuthKey creates a temp auth key file with enough bytes for the given offset+length.
 func makeAuthKey(t *testing.T, size int) string {
 	t.Helper()
@@ -85,19 +117,19 @@ func TestGetAuthToken_FullFlow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v2/api/auth1":
-			if r.Header.Get("X-Radiko-App") != "pc_html5" {
+			if r.Header.Get("X-Radiko-App") != "aSmartPhone8" {
 				http.Error(w, "bad app", http.StatusBadRequest)
 				return
 			}
-			if r.Header.Get("X-Radiko-App-Version") != "0.0.1" {
+			if r.Header.Get("X-Radiko-App-Version") != "8.2.4" {
 				http.Error(w, "bad app version", http.StatusBadRequest)
 				return
 			}
-			if r.Header.Get("X-Radiko-User") != "test-stream" {
+			if len(r.Header.Get("X-Radiko-User")) != 32 {
 				http.Error(w, "bad user", http.StatusBadRequest)
 				return
 			}
-			if r.Header.Get("X-Radiko-Device") != "pc" {
+			if r.Header.Get("X-Radiko-Device") != "34.GooglePixel6" {
 				http.Error(w, "bad device", http.StatusBadRequest)
 				return
 			}
@@ -112,6 +144,18 @@ func TestGetAuthToken_FullFlow(t *testing.T) {
 			}
 			if r.Header.Get("X-Radiko-PartialKey") != partialKey {
 				http.Error(w, "bad partial key", http.StatusUnauthorized)
+				return
+			}
+			if r.Header.Get("X-Radiko-App") != "aSmartPhone8" || r.Header.Get("X-Radiko-App-Version") != "8.2.4" {
+				http.Error(w, "bad app headers", http.StatusUnauthorized)
+				return
+			}
+			if r.Header.Get("X-Radiko-Device") != "34.GooglePixel6" || len(r.Header.Get("X-Radiko-User")) != 32 {
+				http.Error(w, "bad device headers", http.StatusUnauthorized)
+				return
+			}
+			if r.Header.Get("X-Radiko-Location") == "" {
+				http.Error(w, "missing location", http.StatusUnauthorized)
 				return
 			}
 			fmt.Fprint(w, "JP13,JP13,1,1")

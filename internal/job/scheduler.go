@@ -468,8 +468,8 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 	// 録音 ID 生成
 	recordingID := fmt.Sprintf("sched_%d_%d", sc.ID, time.Now().Unix())
 
-	// 認証トークン取得（エリアは JP13 固定; 必要に応じて局から解決）
-	authToken, err := s.radikoClient.GetAuthToken(ctx, "JP13")
+	areaID := radiko.GetAreaIDFromStationID(sc.StationID)
+	authToken, err := s.radikoClient.GetAuthToken(ctx, areaID)
 	if err != nil {
 		errMsg := fmt.Sprintf("認証トークン取得エラー: %v", err)
 		log.Printf("[job] startScheduledRecording (id=%d): %s", sc.ID, errMsg)
@@ -516,7 +516,7 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 	}
 
 	// HLS ダウンロード（タイムフリー録音）
-	if err := s.hlsDownloader.DownloadTimefree(ctx, authToken, sc.StationID, startFmt, endFmt, outputPath); err != nil {
+	if err := s.hlsDownloader.DownloadTimefree(ctx, authToken, sc.StationID, startFmt, endFmt, areaID, outputPath); err != nil {
 		errMsg := fmt.Sprintf("録音エラー: %v", err)
 		log.Printf("[job] startScheduledRecording (id=%d): %s", sc.ID, errMsg)
 		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)

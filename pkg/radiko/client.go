@@ -4,8 +4,10 @@ package radiko
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -50,6 +53,9 @@ func NewClient(redisClient *redis.Client, keyPath string) *Client {
 // まずRedisキャッシュを確認し、なければauth1 → 部分キー生成 → auth2 の2ステップ認証を実行する。
 // 取得したトークンは radiko_auth_token_{areaId} キーで55分間キャッシュする。
 func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error) {
+	if strings.TrimSpace(areaID) == "" {
+		areaID = "JP13"
+	}
 	cacheKey := "radiko_auth_token_" + areaID
 
 	// Redisキャッシュを確認
@@ -64,10 +70,13 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 		return "", fmt.Errorf("radiko auth1: リクエスト生成エラー: %w", err)
 	}
 	req1 = req1.WithContext(ctx)
-	req1.Header.Set("X-Radiko-App", "pc_html5")
-	req1.Header.Set("X-Radiko-App-Version", "0.0.1")
-	req1.Header.Set("X-Radiko-User", "test-stream")
-	req1.Header.Set("X-Radiko-Device", "pc")
+	appVersion := "8.2.4"
+	userID := randomUserID()
+	device := "34.GooglePixel6"
+	req1.Header.Set("X-Radiko-App", "aSmartPhone8")
+	req1.Header.Set("X-Radiko-App-Version", appVersion)
+	req1.Header.Set("X-Radiko-Device", device)
+	req1.Header.Set("X-Radiko-User", userID)
 
 	resp1, err := c.httpClient.Do(req1)
 	if err != nil {
@@ -109,7 +118,7 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 		return "", fmt.Errorf("radiko 部分キー生成: 認証キーファイル読み込みエラー (%s): %w", c.keyPath, err)
 	}
 
-	authKeyBytes, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(keyB64)))
+	authKeyBytes, err := decodeRadikoAuthKeyBase64(keyB64)
 	if err != nil {
 		return "", fmt.Errorf("radiko 部分キー生成: Base64デコードエラー: %w", err)
 	}
@@ -128,9 +137,13 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 		return "", fmt.Errorf("radiko auth2: リクエスト生成エラー: %w", err)
 	}
 	req2 = req2.WithContext(ctx)
+	req2.Header.Set("X-Radiko-App", "aSmartPhone8")
+	req2.Header.Set("X-Radiko-App-Version", appVersion)
+	req2.Header.Set("X-Radiko-Device", device)
+	req2.Header.Set("X-Radiko-User", userID)
 	req2.Header.Set("X-Radiko-AuthToken", authToken)
 	req2.Header.Set("X-Radiko-PartialKey", partialKey)
-	req2.Header.Set("X-Radiko-Location", "35.6897,139.6922")
+	req2.Header.Set("X-Radiko-Location", generateGPSLocation(areaID))
 
 	resp2, err := c.httpClient.Do(req2)
 	if err != nil {
@@ -162,4 +175,26 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 	}
 
 	return authToken, nil
+}
+
+func randomUserID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%032d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
+}
+
+func decodeRadikoAuthKeyBase64(src []byte) ([]byte, error) {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, string(src))
+	enc := base64.StdEncoding
+	if len(cleaned)%4 != 0 {
+		enc = base64.RawStdEncoding
+	}
+	return enc.DecodeString(cleaned)
 }

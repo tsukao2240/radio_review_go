@@ -139,7 +139,7 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 
 		areaID := req.AreaID
 		if areaID == "" {
-			areaID = "JP13"
+			areaID = radiko.GetAreaIDFromStationID(req.StationID)
 		}
 
 		// 認証トークン取得
@@ -189,7 +189,7 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 				log.Printf("StartTimefreeRecording: mkdir storage failed recording_id=%s path=%s: %v", recordingID, h.storagePath, err)
 			}
 
-			dlErr := h.hlsDownloader.DownloadTimefree(ctx, authToken, req.StationID, req.StartTime, req.EndTime, filePath)
+			dlErr := h.hlsDownloader.DownloadTimefree(ctx, authToken, req.StationID, req.StartTime, req.EndTime, areaID, filePath)
 
 			// ステータス更新
 			updated, loadErr := h.loadRecordingInfo(ctx, recordingID)

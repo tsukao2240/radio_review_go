@@ -390,7 +390,7 @@ func TestHLSDownloader_DownloadTimefree(t *testing.T) {
 	dir := t.TempDir()
 	outPath := filepath.Join(dir, "timefree.aac")
 
-	err := d.DownloadTimefree(context.Background(), "test-token", "TBS", "20240101100000", "20240101110000", outPath)
+	err := d.DownloadTimefree(context.Background(), "test-token", "TBS", "20240101100000", "20240101110000", "JP13", outPath)
 	if err != nil {
 		t.Fatalf("DownloadTimefree: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestHLSDownloader_DownloadTimefree_EmptyPlaylist(t *testing.T) {
 	dir := t.TempDir()
 	outPath := filepath.Join(dir, "empty.aac")
 
-	err := d.DownloadTimefree(context.Background(), "tok", "TBS", "20240101100000", "20240101110000", outPath)
+	err := d.DownloadTimefree(context.Background(), "tok", "TBS", "20240101100000", "20240101110000", "JP13", outPath)
 	if err == nil {
 		t.Error("expected error for empty playlist, got nil")
 	}
@@ -468,7 +468,7 @@ func TestBuildTimefreePlaylistURLs_NormalizesTwelveDigitTimes(t *testing.T) {
 	})
 	d := &HLSDownloader{client: newTestClient(&http.Client{Transport: transport}), maxParallel: 2}
 
-	urls, err := d.buildTimefreePlaylistURLs(context.Background(), "TBS", "202401011000", "202401011010", "tok")
+	urls, err := d.buildTimefreePlaylistURLs(context.Background(), "TBS", "202401011000", "202401011010", "tok", "JP13")
 	if err != nil {
 		t.Fatalf("buildTimefreePlaylistURLs: %v", err)
 	}
@@ -488,5 +488,119 @@ func TestBuildTimefreePlaylistURLs_NormalizesTwelveDigitTimes(t *testing.T) {
 	}
 	if q.Get("start_at") != "20240101100000" || q.Get("end_at") != "20240101101000" || q.Get("l") != "300" || q.Get("type") != "b" {
 		t.Fatalf("unexpected query: %s", parsed.RawQuery)
+	}
+}
+
+func TestBuildTimefreePlaylistURLs_UsesAreaFreeURLAndTypeC(t *testing.T) {
+	streamXML := `<?xml version="1.0" encoding="UTF-8"?>
+<urls>
+  <url timefree="1" areafree="0">
+    <playlist_create_url>https://radiko.jp/timefree.m3u8</playlist_create_url>
+  </url>
+  <url timefree="1" areafree="1">
+    <playlist_create_url>https://radiko.jp/areafree.m3u8</playlist_create_url>
+  </url>
+</urls>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, streamXML)
+	}))
+	defer srv.Close()
+
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req2 := req.Clone(req.Context())
+		req2.URL.Scheme = "http"
+		req2.URL.Host = srv.Listener.Addr().String()
+		return srv.Client().Transport.RoundTrip(req2)
+	})
+	d := &HLSDownloader{client: newTestClient(&http.Client{Transport: transport}), maxParallel: 2}
+
+	urls, err := d.buildTimefreePlaylistURLs(context.Background(), "OBC", "202401011000", "202401011005", "tok", "JP27")
+	if err != nil {
+		t.Fatalf("buildTimefreePlaylistURLs: %v", err)
+	}
+	parsed, err := url.Parse(urls[0])
+	if err != nil {
+		t.Fatalf("url.Parse: %v", err)
+	}
+	if parsed.Path != "/areafree.m3u8" {
+		t.Fatalf("path = %q, want /areafree.m3u8", parsed.Path)
+	}
+	if got := parsed.Query().Get("type"); got != "c" {
+		t.Fatalf("type = %q, want c", got)
+	}
+}
+
+func TestNormalizeRadikoTimestamp_NormalizesOverMidnightHours(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "24 hour twelve digits", input: "202606042400", want: "20260605000000"},
+		{name: "25 hour fourteen digits", input: "20260604250000", want: "20260605010000"},
+		{name: "26 hour", input: "20260604263000", want: "20260605023000"},
+		{name: "27 hour", input: "20260604275930", want: "20260605035930"},
+		{name: "28 hour", input: "20260604280000", want: "20260605040000"},
+		{name: "29 hour", input: "20260604290000", want: "20260605050000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := normalizeRadikoTimestamp(tt.input)
+			if err != nil {
+				t.Fatalf("normalizeRadikoTimestamp(%q): %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Fatalf("normalizeRadikoTimestamp(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildTimefreePlaylistURLs_NormalizesOverMidnightEndTime(t *testing.T) {
+	streamXML := `<?xml version="1.0" encoding="UTF-8"?>
+<urls>
+  <url timefree="1" areafree="0">
+    <playlist_create_url>https://radiko.jp/timefree.m3u8</playlist_create_url>
+  </url>
+</urls>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, streamXML)
+	}))
+	defer srv.Close()
+
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		req2 := req.Clone(req.Context())
+		req2.URL.Scheme = "http"
+		req2.URL.Host = srv.Listener.Addr().String()
+		return srv.Client().Transport.RoundTrip(req2)
+	})
+	d := &HLSDownloader{client: newTestClient(&http.Client{Transport: transport}), maxParallel: 2}
+
+	urls, err := d.buildTimefreePlaylistURLs(context.Background(), "OBC", "20260604240000", "20260604250000", "tok", "JP27")
+	if err != nil {
+		t.Fatalf("buildTimefreePlaylistURLs: %v", err)
+	}
+	if len(urls) != 12 {
+		t.Fatalf("got %d urls, want 12: %v", len(urls), urls)
+	}
+	first, err := url.Parse(urls[0])
+	if err != nil {
+		t.Fatalf("url.Parse first: %v", err)
+	}
+	last, err := url.Parse(urls[len(urls)-1])
+	if err != nil {
+		t.Fatalf("url.Parse last: %v", err)
+	}
+
+	firstQuery := first.Query()
+	if firstQuery.Get("ft") != "20260605000000" || firstQuery.Get("to") != "20260605010000" || firstQuery.Get("seek") != "20260605000000" {
+		t.Fatalf("unexpected first query: %s", first.RawQuery)
+	}
+	if firstQuery.Get("start_at") != "20260605000000" || firstQuery.Get("end_at") != "20260605010000" {
+		t.Fatalf("unexpected first query: %s", first.RawQuery)
+	}
+	if got := last.Query().Get("seek"); got != "20260605005500" {
+		t.Fatalf("last seek = %q, want %q", got, "20260605005500")
 	}
 }

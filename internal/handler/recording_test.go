@@ -35,12 +35,12 @@ var _ radiko.ClientInterface = (*stubRadikoClient)(nil)
 
 // stubHLSDownloader は radiko.HLSDownloaderInterface のスタブ。
 type stubHLSDownloader struct {
-	downloadFunc func(ctx context.Context, authToken, stationID, startTime, endTime, outputPath string) error
+	downloadFunc func(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error
 }
 
-func (d *stubHLSDownloader) DownloadTimefree(ctx context.Context, authToken, stationID, startTime, endTime, outputPath string) error {
+func (d *stubHLSDownloader) DownloadTimefree(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error {
 	if d.downloadFunc != nil {
-		return d.downloadFunc(ctx, authToken, stationID, startTime, endTime, outputPath)
+		return d.downloadFunc(ctx, authToken, stationID, startTime, endTime, areaID, outputPath)
 	}
 	return nil
 }
@@ -142,7 +142,7 @@ func TestStartTimefreeRecording_DownloadFailureStoresFailReason(t *testing.T) {
 	done := make(chan struct{})
 	downloadErr := errors.New("playlist returned status 404")
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{
-		downloadFunc: func(ctx context.Context, authToken, stationID, startTime, endTime, outputPath string) error {
+		downloadFunc: func(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error {
 			defer close(done)
 			return downloadErr
 		},
@@ -189,6 +189,51 @@ func TestStartTimefreeRecording_DownloadFailureStoresFailReason(t *testing.T) {
 	}
 	if info.FailReason != downloadErr.Error() {
 		t.Fatalf("fail_reason = %q, want %q", info.FailReason, downloadErr.Error())
+	}
+}
+
+func TestStartTimefreeRecording_ResolvesAreaFromStationID(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	dir := t.TempDir()
+	store := sessions.NewCookieStore([]byte("test"))
+
+	authArea := make(chan string, 1)
+	downloadArea := make(chan string, 1)
+	h := NewRecordingHandler(&stubRadikoClient{
+		getAuthTokenFunc: func(ctx context.Context, areaID string) (string, error) {
+			authArea <- areaID
+			return "test-token", nil
+		},
+	}, &stubHLSDownloader{
+		downloadFunc: func(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error {
+			downloadArea <- areaID
+			return nil
+		},
+	}, rdb, dir)
+
+	body, _ := json.Marshal(map[string]string{
+		"station_id":   "OBC",
+		"start_time":   "20240101100000",
+		"end_time":     "20240101110000",
+		"program_name": "Osaka Show",
+	})
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/recording/timefree/start", bytes.NewReader(body)), 1)
+	rr := httptest.NewRecorder()
+	h.StartTimefreeRecording(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200", rr.Code)
+	}
+	if got := <-authArea; got != "JP27" {
+		t.Fatalf("auth area = %q, want JP27", got)
+	}
+	select {
+	case got := <-downloadArea:
+		if got != "JP27" {
+			t.Fatalf("download area = %q, want JP27", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for download")
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 type HLSDownloaderInterface interface {
 	// DownloadTimefree はタイムフリー番組をダウンロードしてファイルパスを返す。
 	// errgroup + semaphore で最大RECORDING_MAX_PARALLEL並列（デフォルト10）。
-	DownloadTimefree(ctx context.Context, authToken, stationID, startTime, endTime string, outputPath string) error
+	DownloadTimefree(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error
 }
 
 // HLSDownloader はHLSダウンロードの実装。
@@ -43,9 +44,9 @@ func NewHLSDownloader(client *Client, maxParallel int64) *HLSDownloader {
 }
 
 // DownloadTimefree はタイムフリー番組をHLSセグメント並列ダウンロードで取得し、outputPath に書き込む。
-func (d *HLSDownloader) DownloadTimefree(ctx context.Context, authToken, stationID, startTime, endTime string, outputPath string) error {
+func (d *HLSDownloader) DownloadTimefree(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error {
 	// 1. タイムフリーm3u8プレイリストURLの組み立て
-	playlistURLs, err := d.buildTimefreePlaylistURLs(ctx, stationID, startTime, endTime, authToken)
+	playlistURLs, err := d.buildTimefreePlaylistURLs(ctx, stationID, startTime, endTime, authToken, areaID)
 	if err != nil {
 		return fmt.Errorf("buildTimefreePlaylistURLs: %w", err)
 	}
@@ -187,7 +188,7 @@ func isNestedPlaylistLine(lastDirective, resolvedURL string) bool {
 	return strings.Contains(lowerURL, ".m3u8") || strings.Contains(lowerURL, "medialist")
 }
 
-func (d *HLSDownloader) buildTimefreePlaylistURLs(ctx context.Context, stationID, startTime, endTime, authToken string) ([]string, error) {
+func (d *HLSDownloader) buildTimefreePlaylistURLs(ctx context.Context, stationID, startTime, endTime, authToken, areaID string) ([]string, error) {
 	startAt, err := normalizeRadikoTimestamp(startTime)
 	if err != nil {
 		return nil, fmt.Errorf("startTime: %w", err)
@@ -213,7 +214,8 @@ func (d *HLSDownloader) buildTimefreePlaylistURLs(ctx context.Context, stationID
 		return nil, fmt.Errorf("endTime must be after startTime")
 	}
 
-	baseURL, err := d.fetchTimefreePlaylistCreateURL(ctx, stationID, authToken)
+	isAreaFree := strings.TrimSpace(areaID) != "" && areaID != "JP13"
+	baseURL, err := d.fetchTimefreePlaylistCreateURL(ctx, stationID, authToken, isAreaFree)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +237,11 @@ func (d *HLSDownloader) buildTimefreePlaylistURLs(ctx context.Context, stationID
 		q.Set("seek", seek.Format("20060102150405"))
 		q.Set("l", fmt.Sprintf("%d", chunkSeconds))
 		q.Set("lsid", lsid)
-		q.Set("type", "b")
+		if isAreaFree {
+			q.Set("type", "c")
+		} else {
+			q.Set("type", "b")
+		}
 		u.RawQuery = q.Encode()
 		playlistURLs = append(playlistURLs, u.String())
 	}
@@ -247,12 +253,46 @@ func normalizeRadikoTimestamp(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	switch len(value) {
 	case 12:
-		return value + "00", nil
+		value += "00"
 	case 14:
-		return value, nil
 	default:
 		return "", fmt.Errorf("invalid timestamp length %d", len(value))
 	}
+
+	datePart := value[:8]
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		return "", fmt.Errorf("time.LoadLocation: %w", err)
+	}
+	baseDate, err := time.ParseInLocation("20060102", datePart, loc)
+	if err != nil {
+		return "", fmt.Errorf("invalid date: %w", err)
+	}
+
+	hour, err := strconv.Atoi(value[8:10])
+	if err != nil {
+		return "", fmt.Errorf("invalid hour: %w", err)
+	}
+	if hour < 0 {
+		return "", fmt.Errorf("invalid hour %d", hour)
+	}
+	minute, err := strconv.Atoi(value[10:12])
+	if err != nil {
+		return "", fmt.Errorf("invalid minute: %w", err)
+	}
+	second, err := strconv.Atoi(value[12:14])
+	if err != nil {
+		return "", fmt.Errorf("invalid second: %w", err)
+	}
+	if minute < 0 || minute > 59 {
+		return "", fmt.Errorf("invalid minute %d", minute)
+	}
+	if second < 0 || second > 59 {
+		return "", fmt.Errorf("invalid second %d", second)
+	}
+
+	normalized := baseDate.AddDate(0, 0, hour/24).Add(time.Duration(hour%24)*time.Hour + time.Duration(minute)*time.Minute + time.Duration(second)*time.Second)
+	return normalized.Format("20060102150405"), nil
 }
 
 func randomLSID() string {
@@ -263,7 +303,7 @@ func randomLSID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func (d *HLSDownloader) fetchTimefreePlaylistCreateURL(ctx context.Context, stationID, authToken string) (string, error) {
+func (d *HLSDownloader) fetchTimefreePlaylistCreateURL(ctx context.Context, stationID, authToken string, isAreaFree bool) (string, error) {
 	streamInfoURL := fmt.Sprintf("https://radiko.jp/v3/station/stream/pc_html5/%s.xml", url.PathEscape(stationID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamInfoURL, nil)
 	if err != nil {
@@ -283,14 +323,14 @@ func (d *HLSDownloader) fetchTimefreePlaylistCreateURL(ctx context.Context, stat
 		return "", fmt.Errorf("GET stream info returned status %d", resp.StatusCode)
 	}
 
-	playlistCreateURL, err := parseTimefreePlaylistCreateURL(resp.Body)
+	playlistCreateURL, err := parseTimefreePlaylistCreateURL(resp.Body, isAreaFree)
 	if err != nil {
 		return "", err
 	}
 	return playlistCreateURL, nil
 }
 
-func parseTimefreePlaylistCreateURL(r io.Reader) (string, error) {
+func parseTimefreePlaylistCreateURL(r io.Reader, isAreaFree bool) (string, error) {
 	decoder := xml.NewDecoder(r)
 
 	type candidate struct {
@@ -352,7 +392,7 @@ func parseTimefreePlaylistCreateURL(r io.Reader) (string, error) {
 	}
 
 	for _, candidate := range candidates {
-		if !candidate.areafree {
+		if candidate.areafree == isAreaFree {
 			return candidate.text, nil
 		}
 	}
