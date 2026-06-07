@@ -6,3 +6,5 @@ storage/keys/
 /server
 coverage.out
 .vscode/
+DESIGN_PLAN.md
+.dev_plan_*.md
