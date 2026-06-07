@@ -42,39 +42,66 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 	// 各お気に入りに次回放送のキャスト・日付を付与
 	type favWithCast struct {
-		ID           int64
-		StationID    string
-		ProgramTitle string
-		BroadcastDay interface{}
-		CreatedAt    interface{}
-		Cast         string
-		NextDate     string
+		ID             int64
+		StationID      string
+		ProgramTitle   string
+		BroadcastDay   interface{}
+		CreatedAt      interface{}
+		Cast           string
+		NextDate       string
+		Recordable     bool
+		RecProgramName string
+		RecDate        string
+		RecStart       string
+		RecEnd         string
 	}
 	favsWithCast := make([]favWithCast, 0, len(favs))
 	for _, f := range favs {
 		cast := ""
 		nextDate := ""
+		recordable := false
+		recProgramName := ""
+		recDate := ""
+		recStart := ""
+		recEnd := ""
 		if h.radikoService != nil {
-			// 次回放送のキャスト・日付を優先、なければ直近タイムフリー放送を使用
-			if next := findNextBroadcast(h.radikoService, f.StationID, f.ProgramTitle, f.BroadcastDay); next != nil {
-				cast, _ = next["cast"].(string)
-				nextDate, _ = next["date"].(string)
-			}
-			if cast == "" {
-				if latest := findLatestTimefree(h.radikoService, f.StationID, f.ProgramTitle); latest != nil {
+			entries, err := twoWeekEntries(h.radikoService, f.StationID)
+			if err == nil {
+				latest := findLatestTimefreeFromEntries(entries, f.ProgramTitle)
+
+				// 次回放送のキャスト・日付を優先、なければ直近タイムフリー放送を使用
+				if next := findNextBroadcastFromEntries(entries, f.ProgramTitle, f.BroadcastDay); next != nil {
+					cast, _ = next["cast"].(string)
+					nextDate, _ = next["date"].(string)
+				}
+				if cast == "" && latest != nil {
 					cast, _ = latest["cast"].(string)
 					nextDate, _ = latest["date"].(string)
+				}
+				if latest != nil {
+					recDate, _ = latest["date"].(string)
+					recStart, _ = latest["start"].(string)
+					recEnd, _ = latest["end"].(string)
+					if recDate != "" && recStart != "" && recEnd != "" {
+						recordable = true
+						recProgramName = f.ProgramTitle
+					}
 				}
 			}
 		}
 		favsWithCast = append(favsWithCast, favWithCast{
-			ID:           f.ID,
-			StationID:    f.StationID,
-			ProgramTitle: f.ProgramTitle,
-			BroadcastDay: f.BroadcastDay,
-			CreatedAt:    f.CreatedAt,
-			Cast:         cast,
-			NextDate:     nextDate,
+			ID:             f.ID,
+			StationID:      f.StationID,
+			ProgramTitle:   f.ProgramTitle,
+			BroadcastDay:   f.BroadcastDay,
+			CreatedAt:      f.CreatedAt,
+			Cast:           cast,
+			NextDate:       nextDate,
+			Recordable:     recordable,
+			RecProgramName: recProgramName,
+			RecDate:        recDate,
+			RecStart:       recStart,
+			RecEnd:         recEnd,
 		})
 	}
 

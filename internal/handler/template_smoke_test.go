@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,19 +63,25 @@ func buildFuncMap() template.FuncMap {
 // executeTemplate はテンプレートをパース・実行してエラーを返す。
 func executeTemplate(t *testing.T, root, tmplPath string, data TemplateData) error {
 	t.Helper()
+	_, err := renderTemplateString(t, root, tmplPath, data)
+	return err
+}
+
+func renderTemplateString(t *testing.T, root, tmplPath string, data TemplateData) (string, error) {
+	t.Helper()
 	basePath := filepath.Join(root, "web/templates/layouts/base.html")
 	fullPath := filepath.Join(root, tmplPath)
 
 	tmpl, err := template.New("").Funcs(buildFuncMap()).ParseFiles(basePath, fullPath)
 	if err != nil {
-		return fmt.Errorf("ParseFiles(%s): %w", tmplPath, err)
+		return "", fmt.Errorf("ParseFiles(%s): %w", tmplPath, err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "base", data); err != nil {
-		return fmt.Errorf("ExecuteTemplate(%s): %w", tmplPath, err)
+		return "", fmt.Errorf("ExecuteTemplate(%s): %w", tmplPath, err)
 	}
-	return nil
+	return buf.String(), nil
 }
 
 // minimalTD は最低限のフィールドを持つ TemplateData を返す。
@@ -135,6 +142,65 @@ func TestTemplateSmoke_ProgramDetail(t *testing.T) {
 				t.Error(err)
 			}
 		})
+	}
+}
+
+func TestTemplateSmoke_FavoriteIndexTimefreeRecordingButton(t *testing.T) {
+	root := projectRoot(t)
+	now := time.Now()
+	favorites := []struct {
+		ID             int64
+		StationID      string
+		ProgramTitle   string
+		BroadcastDay   *int
+		CreatedAt      time.Time
+		Cast           string
+		NextDate       string
+		Recordable     bool
+		RecProgramName string
+		RecDate        string
+		RecStart       string
+		RecEnd         string
+	}{
+		{
+			ID:             1,
+			StationID:      "TBS",
+			ProgramTitle:   "録音可能番組",
+			CreatedAt:      now,
+			Cast:           "出演者",
+			NextDate:       "20260601",
+			Recordable:     true,
+			RecProgramName: "録音可能番組",
+			RecDate:        "20260601",
+			RecStart:       "10:00",
+			RecEnd:         "12:00",
+		},
+		{
+			ID:           2,
+			StationID:    "QRR",
+			ProgramTitle: "録音不可番組",
+			CreatedAt:    now,
+		},
+	}
+
+	html, err := renderTemplateString(t, root, "web/templates/favorite/index.html", loggedInTD(map[string]interface{}{
+		"Favorites": favorites,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(html, "タイムフリー録音") {
+		t.Error("expected timefree recording button text")
+	}
+	if !strings.Contains(html, `data-program-name="録音可能番組"`) {
+		t.Error("expected recording data-program-name")
+	}
+	if !strings.Contains(html, `fetch('/recording/timefree/start'`) {
+		t.Error("expected timefree recording fetch")
+	}
+	if strings.Contains(html, `data-program-name="録音不可番組"`) {
+		t.Error("unexpected recording button for non-recordable favorite")
 	}
 }
 
@@ -205,13 +271,18 @@ func TestTemplateSmoke_Favorites(t *testing.T) {
 
 	now := time.Now()
 	type favWithCast struct {
-		ID           int64
-		StationID    string
-		ProgramTitle string
-		BroadcastDay interface{}
-		CreatedAt    interface{}
-		Cast         string
-		NextDate     string
+		ID             int64
+		StationID      string
+		ProgramTitle   string
+		BroadcastDay   interface{}
+		CreatedAt      interface{}
+		Cast           string
+		NextDate       string
+		Recordable     bool
+		RecProgramName string
+		RecDate        string
+		RecStart       string
+		RecEnd         string
 	}
 
 	data := map[string]interface{}{

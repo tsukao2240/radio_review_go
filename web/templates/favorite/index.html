@@ -43,11 +43,23 @@
             <i class="far fa-clock mr-1"></i>登録日時: {{ .CreatedAt.Format "2006年01月02日 15:04" }}
           </p>
         </div>
-        <button class="delete-favorite-btn flex-shrink-0 text-sm px-3 py-1 border border-red-300 dark:border-red-700 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-                data-station-id="{{ .StationID }}"
-                data-program-title="{{ .ProgramTitle }}">
-          <i class="fas fa-trash mr-1"></i>削除
-        </button>
+        <div class="flex-shrink-0 flex flex-col sm:flex-row gap-2">
+          {{ if .Recordable }}
+          <button class="timefree-recording-btn text-sm px-3 py-1 border border-green-400 dark:border-green-700 rounded-lg text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition"
+                  data-station-id="{{ .StationID }}"
+                  data-program-name="{{ .RecProgramName }}"
+                  data-date="{{ .RecDate }}"
+                  data-start="{{ .RecStart }}"
+                  data-end="{{ .RecEnd }}">
+            <i class="fas fa-microphone mr-1"></i>タイムフリー録音
+          </button>
+          {{ end }}
+          <button class="delete-favorite-btn text-sm px-3 py-1 border border-red-300 dark:border-red-700 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                  data-station-id="{{ .StationID }}"
+                  data-program-title="{{ .ProgramTitle }}">
+            <i class="fas fa-trash mr-1"></i>削除
+          </button>
+        </div>
       </div>
     </div>
     {{ end }}
@@ -71,6 +83,8 @@
 <script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
     var days = ['月', '火', '水', '木', '金', '土', '日'];
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
     document.querySelectorAll('[data-broadcast-day]').forEach(function(el) {
         var day = parseInt(el.dataset.broadcastDay);
         if (!isNaN(day) && day >= 0 && day < 7) {
@@ -91,7 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    'X-CSRF-TOKEN': csrfToken
                 },
                 body: JSON.stringify({ station_id: stationId, program_title: programTitle })
             })
@@ -106,6 +120,56 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(function(error) {
                 window.toast ? window.toast.error('エラーが発生しました: ' + error) : alert('エラーが発生しました: ' + error);
+            });
+        });
+    });
+
+    document.querySelectorAll('.timefree-recording-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var stationId = this.dataset.stationId;
+            var programName = this.dataset.programName;
+            var date = this.dataset.date;
+            var start = this.dataset.start.replace(':', '');
+            var end = this.dataset.end.replace(':', '');
+
+            if (!confirm('「' + programName + '」を録音しますか？')) {
+                return;
+            }
+
+            fetch('/recording/timefree/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    station_id: stationId,
+                    program_name: programName,
+                    start_time: date + start,
+                    end_time: date + end
+                })
+            })
+            .then(function(response) {
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return null;
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                if (!data) {
+                    return;
+                }
+                if (data.success) {
+                    if (window.toast) window.toast.success('録音を開始しました。録音履歴ページで進捗を確認できます。');
+                    setTimeout(function() { window.location.href = '/recording/history'; }, 2000);
+                } else {
+                    var message = data.message || data.error || '録音の開始に失敗しました';
+                    window.toast ? window.toast.error('エラー: ' + message) : alert('エラー: ' + message);
+                }
+            })
+            .catch(function(error) {
+                window.toast ? window.toast.error('録音リクエスト中にエラーが発生しました: ' + error) : alert('録音リクエスト中にエラーが発生しました: ' + error);
             });
         });
     });

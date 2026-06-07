@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yourname/radio_review_go/internal/middleware"
 	"github.com/yourname/radio_review_go/internal/model"
@@ -277,6 +278,142 @@ func TestFavoriteHandler_Index(t *testing.T) {
 		h.Index(rr, req)
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("got %d, want 500", rr.Code)
+		}
+	})
+	t.Run("タイムフリーあり: 録音情報を付与", func(t *testing.T) {
+		createdAt := time.Now()
+		svc := &stubFavService{
+			getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return []model.FavoriteProgram{{
+					ID:           1,
+					UserID:       userID,
+					StationID:    "TBS",
+					ProgramTitle: "jazz",
+					CreatedAt:    createdAt,
+				}}, nil
+			},
+		}
+
+		calls := 0
+		end := time.Now().Add(-1 * time.Hour)
+		start := end.Add(-2 * time.Hour)
+		radiko := &stubRadikoService{
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				calls++
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"title": "jazz",
+								"cast":  "DJ",
+								"date":  start.Format("20060102"),
+								"start": start.Format("15:04"),
+								"end":   end.Format("15:04"),
+								"to":    end.Format("20060102150405"),
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		h := NewFavoriteHandler(svc, radiko, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+		if calls != 1 {
+			t.Errorf("GetTwoWeekSchedule calls = %d, want 1", calls)
+		}
+
+		var resp struct {
+			Favorites []struct {
+				Cast           string
+				Recordable     bool
+				RecProgramName string
+				RecDate        string
+				RecStart       string
+				RecEnd         string
+			}
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if len(resp.Favorites) != 1 {
+			t.Fatalf("favorites len = %d, want 1", len(resp.Favorites))
+		}
+		got := resp.Favorites[0]
+		if !got.Recordable {
+			t.Error("expected Recordable=true")
+		}
+		if got.Cast != "DJ" {
+			t.Errorf("Cast = %q, want DJ", got.Cast)
+		}
+		if got.RecProgramName != "jazz" || got.RecDate != start.Format("20060102") || got.RecStart != start.Format("15:04") || got.RecEnd != end.Format("15:04") {
+			t.Errorf("recording fields = %#v", got)
+		}
+	})
+	t.Run("タイムフリーなし: 録音不可", func(t *testing.T) {
+		svc := &stubFavService{
+			getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return []model.FavoriteProgram{{
+					ID:           1,
+					UserID:       userID,
+					StationID:    "TBS",
+					ProgramTitle: "jazz",
+					CreatedAt:    time.Now(),
+				}}, nil
+			},
+		}
+
+		calls := 0
+		end := time.Now().AddDate(0, 0, -8)
+		radiko := &stubRadikoService{
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				calls++
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"title": "jazz",
+								"cast":  "DJ",
+								"date":  end.Format("20060102"),
+								"start": "10:00",
+								"end":   "12:00",
+								"to":    end.Format("20060102150405"),
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		h := NewFavoriteHandler(svc, radiko, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+		if calls != 1 {
+			t.Errorf("GetTwoWeekSchedule calls = %d, want 1", calls)
+		}
+
+		var resp struct {
+			Favorites []struct {
+				Recordable bool
+			}
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if len(resp.Favorites) != 1 {
+			t.Fatalf("favorites len = %d, want 1", len(resp.Favorites))
+		}
+		if resp.Favorites[0].Recordable {
+			t.Error("expected Recordable=false")
 		}
 	})
 }

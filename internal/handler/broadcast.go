@@ -258,12 +258,19 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 // findLatestTimefree は2週間番組表からタイムフリー再生可能な直近放送を返す。
 // 放送終了済み（過去）かつ7日以内のものを対象とし、最新のものを返す。
 func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title string) map[string]interface{} {
-	schedule, err := svc.GetTwoWeekSchedule(stationID)
-	if err != nil || len(schedule) == 0 {
+	entries, err := twoWeekEntries(svc, stationID)
+	if err != nil {
 		log.Printf("findLatestTimefree: GetTwoWeekSchedule error: %v", err)
 		return nil
 	}
+	return findLatestTimefreeFromEntries(entries, title)
+}
 
+func twoWeekEntries(svc service.RadikoApiServiceInterface, stationID string) ([]map[string]interface{}, error) {
+	schedule, err := svc.GetTwoWeekSchedule(stationID)
+	if err != nil || len(schedule) == 0 {
+		return nil, err
+	}
 	var entries []map[string]interface{}
 	switch v := schedule[0]["entries"].(type) {
 	case []map[string]interface{}:
@@ -275,6 +282,10 @@ func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title 
 			}
 		}
 	}
+	return entries, nil
+}
+
+func findLatestTimefreeFromEntries(entries []map[string]interface{}, title string) map[string]interface{} {
 	now := time.Now()
 	timefreeLimitDate := now.AddDate(0, 0, -7)
 
@@ -337,20 +348,9 @@ func entryForDate(svc service.RadikoApiServiceInterface, stationID, title, date 
 // findLatestTimefreeWithCast は指定キャストと一致する直近タイムフリー対象放送を返す。
 // 一致するものがなければキャスト不問で findLatestTimefree と同等の結果を返す。
 func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID, title, cast string) map[string]interface{} {
-	schedule, err := svc.GetTwoWeekSchedule(stationID)
-	if err != nil || len(schedule) == 0 {
+	entries, err := twoWeekEntries(svc, stationID)
+	if err != nil {
 		return nil
-	}
-	var entries []map[string]interface{}
-	switch v := schedule[0]["entries"].(type) {
-	case []map[string]interface{}:
-		entries = v
-	case []interface{}:
-		for _, raw := range v {
-			if m, ok := raw.(map[string]interface{}); ok {
-				entries = append(entries, m)
-			}
-		}
 	}
 	now := time.Now()
 	limit := now.AddDate(0, 0, -7)
@@ -400,21 +400,14 @@ func isTimefreeEligible(entry map[string]interface{}) bool {
 // findNextBroadcast は次回放送（未来）のエントリを返す。
 // broadcastDay が nil でない場合は指定曜日（0=月〜6=日）のみを対象にする。
 func findNextBroadcast(svc service.RadikoApiServiceInterface, stationID, title string, broadcastDay *int) map[string]interface{} {
-	schedule, err := svc.GetTwoWeekSchedule(stationID)
-	if err != nil || len(schedule) == 0 {
+	entries, err := twoWeekEntries(svc, stationID)
+	if err != nil {
 		return nil
 	}
-	var entries []map[string]interface{}
-	switch v := schedule[0]["entries"].(type) {
-	case []map[string]interface{}:
-		entries = v
-	case []interface{}:
-		for _, raw := range v {
-			if m, ok := raw.(map[string]interface{}); ok {
-				entries = append(entries, m)
-			}
-		}
-	}
+	return findNextBroadcastFromEntries(entries, title, broadcastDay)
+}
+
+func findNextBroadcastFromEntries(entries []map[string]interface{}, title string, broadcastDay *int) map[string]interface{} {
 	now := time.Now()
 	var next map[string]interface{}
 	var nextTime time.Time
