@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/gorilla/sessions"
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/internal/repository"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -17,8 +17,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/pkg/radiko"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
 // Scheduler は全バックグラウンドジョブを管理する。

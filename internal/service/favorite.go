@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/internal/repository"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 )
 
 // FavoriteService は FavoriteServiceInterface を実装する。

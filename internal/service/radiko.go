@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/yourname/radio_review_go/internal/repository"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 )
 
 // RadikoApiService は RadikoApiServiceInterface の実装

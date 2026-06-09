@@ -1,6 +1,6 @@
 package service
 
-import "github.com/yourname/radio_review_go/internal/model"
+import "github.com/tsukao2240/radio_review_go/internal/model"
 
 // RadikoApiServiceInterface - Radiko APIとの連携
 type RadikoApiServiceInterface interface {

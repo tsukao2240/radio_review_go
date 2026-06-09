@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yourname/radio_review_go/internal/middleware"
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/internal/service"
+	"github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/service"
 )
 
 // stubFavService は FavoriteServiceInterface のスタブ実装。

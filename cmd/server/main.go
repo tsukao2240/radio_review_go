@@ -19,13 +19,13 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/yourname/radio_review_go/internal/handler"
-	"github.com/yourname/radio_review_go/internal/job"
-	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/internal/repository"
-	"github.com/yourname/radio_review_go/internal/service"
-	"github.com/yourname/radio_review_go/pkg/radiko"
+	"github.com/tsukao2240/radio_review_go/internal/handler"
+	"github.com/tsukao2240/radio_review_go/internal/job"
+	appmiddleware "github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
+	"github.com/tsukao2240/radio_review_go/internal/service"
+	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
 func main() {

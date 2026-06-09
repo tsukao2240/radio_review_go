@@ -1,4 +1,4 @@
-module github.com/yourname/radio_review_go
+module github.com/tsukao2240/radio_review_go
 
 go 1.22
 

@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/gorilla/sessions"
-	"github.com/yourname/radio_review_go/internal/middleware"
-	"github.com/yourname/radio_review_go/internal/service"
+	"github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/service"
 )
 
 // FavoriteHandler はお気に入り番組関連の HTTP ハンドラーを管理する。

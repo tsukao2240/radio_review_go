@@ -15,7 +15,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 func TestInsertColon(t *testing.T) {

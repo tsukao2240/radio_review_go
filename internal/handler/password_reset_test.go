@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/yourname/radio_review_go/internal/service"
+	"github.com/tsukao2240/radio_review_go/internal/service"
 )
 
 // stubPasswordResetService は PasswordResetServiceInterface のスタブ実装。

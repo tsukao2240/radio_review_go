@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 // --- PostLikeRepositoryInterface スタブ ---

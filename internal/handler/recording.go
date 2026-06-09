@@ -15,9 +15,9 @@ import (
 
 	"github.com/gorilla/sessions"
 	"github.com/redis/go-redis/v9"
-	"github.com/yourname/radio_review_go/internal/middleware"
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/pkg/radiko"
+	"github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
 // RecordingHandler は録音関連のHTTPハンドラーを管理する。

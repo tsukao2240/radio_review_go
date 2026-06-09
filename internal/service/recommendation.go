@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/internal/repository"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 )
 
 // RecommendationService は RecommendationServiceInterface を実装する。
