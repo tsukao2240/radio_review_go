@@ -64,7 +64,9 @@
                   data-program-name="{{ .RecProgramName }}"
                   data-date="{{ .RecDate }}"
                   data-start="{{ .RecStart }}"
-                  data-end="{{ .RecEnd }}">
+                  data-end="{{ .RecEnd }}"
+                  data-ft="{{ .RecFt }}"
+                  data-to="{{ .RecTo }}">
             <i class="fas fa-microphone mr-1"></i>タイムフリー録音
           </button>
           {{ end }}
@@ -197,6 +199,8 @@ document.addEventListener('DOMContentLoaded', function() {
             var date = this.dataset.date;
             var start = this.dataset.start.replace(':', '');
             var end = this.dataset.end.replace(':', '');
+            var startTime = this.dataset.ft || (date + start);
+            var endTime = this.dataset.to || (date + end);
 
             if (!confirm('「' + programName + '」を録音しますか？')) {
                 return;
@@ -211,8 +215,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({
                     station_id: stationId,
                     program_name: programName,
-                    start_time: date + start,
-                    end_time: date + end
+                    start_time: startTime,
+                    end_time: endTime
                 })
             })
             .then(function(response) {

@@ -367,8 +367,8 @@ func TestFavoriteHandler_RecordAll(t *testing.T) {
 	if len(starts) != 1 {
 		t.Fatalf("starts len = %d, want 1", len(starts))
 	}
-	wantStart := matchingStart.Format("20060102") + strings.ReplaceAll(matchingStart.Format("15:04"), ":", "")
-	wantEnd := matchingEnd.Format("20060102") + strings.ReplaceAll(matchingEnd.Format("15:04"), ":", "")
+	wantStart := matchingStart.Format("20060102150405")
+	wantEnd := matchingEnd.Format("20060102150405")
 	if starts[0]["programName"] != "daily" || starts[0]["startTime"] != wantStart || starts[0]["endTime"] != wantEnd {
 		t.Fatalf("start args = %#v", starts[0])
 	}
@@ -380,6 +380,68 @@ func TestFavoriteHandler_RecordAll(t *testing.T) {
 	}
 	if resp.Items[2].Status != "skipped" || resp.Items[2].Reason != "同じ番組が録音中です" {
 		t.Fatalf("third item = %#v", resp.Items[2])
+	}
+}
+
+func TestFavoriteHandler_RecordAll_UsesRadikoFtToForLateNightProgram(t *testing.T) {
+	now := time.Now()
+	start := now.AddDate(0, 0, -2)
+	start = time.Date(start.Year(), start.Month(), start.Day(), 1, 0, 0, 0, time.Local)
+	end := start.Add(2 * time.Hour)
+
+	svc := &stubFavService{
+		getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+			return []model.FavoriteProgram{{
+				ID:           1,
+				UserID:       userID,
+				StationID:    "LFR",
+				ProgramTitle: "late night",
+				CreatedAt:    now,
+			}}, nil
+		},
+	}
+	radiko := &stubRadikoService{
+		getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+			return []map[string]interface{}{
+				{
+					"entries": []map[string]interface{}{
+						{
+							"title": "late night",
+							"date":  start.Format("20060102"),
+							"start": "25:00",
+							"end":   "27:00",
+							"ft":    start.Format("20060102150405"),
+							"to":    end.Format("20060102150405"),
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	var gotStart, gotEnd string
+	recorder := &stubFavoriteRecorder{
+		startFunc: func(ctx context.Context, ownerKey, stationID, programName, startTime, endTime, areaID string) (string, error) {
+			gotStart = startTime
+			gotEnd = endTime
+			return "rec-late", nil
+		},
+	}
+
+	h := NewFavoriteHandler(svc, radiko, nil)
+	h.SetRecorder(recorder)
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/record-all", nil), 7)
+	rr := httptest.NewRecorder()
+	h.RecordAll(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200", rr.Code)
+	}
+	if gotStart != start.Format("20060102150405") || gotEnd != end.Format("20060102150405") {
+		t.Fatalf("recording times = %q/%q, want %q/%q", gotStart, gotEnd, start.Format("20060102150405"), end.Format("20060102150405"))
+	}
+	if gotStart == start.Format("20060102")+"2500" {
+		t.Fatalf("recording start used display time: %q", gotStart)
 	}
 }
 
@@ -490,6 +552,8 @@ func TestFavoriteHandler_Index(t *testing.T) {
 				RecDate        string
 				RecStart       string
 				RecEnd         string
+				RecFt          string
+				RecTo          string
 			}
 		}
 		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
@@ -507,6 +571,71 @@ func TestFavoriteHandler_Index(t *testing.T) {
 		}
 		if got.RecProgramName != "jazz" || got.RecDate != start.Format("20060102") || got.RecStart != start.Format("15:04") || got.RecEnd != end.Format("15:04") {
 			t.Errorf("recording fields = %#v", got)
+		}
+	})
+	t.Run("タイムフリーあり: 24時以降はft/toを録音用に付与", func(t *testing.T) {
+		now := time.Now()
+		start := now.AddDate(0, 0, -2)
+		start = time.Date(start.Year(), start.Month(), start.Day(), 1, 0, 0, 0, time.Local)
+		end := start.Add(2 * time.Hour)
+		svc := &stubFavService{
+			getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return []model.FavoriteProgram{{
+					ID:           1,
+					UserID:       userID,
+					StationID:    "LFR",
+					ProgramTitle: "late night",
+					CreatedAt:    now,
+				}}, nil
+			},
+		}
+		radiko := &stubRadikoService{
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"title": "late night",
+								"date":  start.Format("20060102"),
+								"start": "25:00",
+								"end":   "27:00",
+								"ft":    start.Format("20060102150405"),
+								"to":    end.Format("20060102150405"),
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		h := NewFavoriteHandler(svc, radiko, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+		var resp struct {
+			Favorites []struct {
+				Recordable bool
+				RecStart   string
+				RecEnd     string
+				RecFt      string
+				RecTo      string
+			}
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if len(resp.Favorites) != 1 {
+			t.Fatalf("favorites len = %d, want 1", len(resp.Favorites))
+		}
+		got := resp.Favorites[0]
+		if !got.Recordable || got.RecStart != "25:00" || got.RecEnd != "27:00" {
+			t.Fatalf("recording display fields = %#v", got)
+		}
+		if got.RecFt != start.Format("20060102150405") || got.RecTo != end.Format("20060102150405") {
+			t.Fatalf("recording ft/to = %#v", got)
 		}
 	})
 	t.Run("タイムフリーあり: broadcast_dayの曜日を録音対象にする", func(t *testing.T) {

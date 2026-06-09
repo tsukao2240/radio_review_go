@@ -341,6 +341,59 @@ func TestBroadcastHandler_ShowProgramDetail(t *testing.T) {
 			t.Errorf("got %d, want 500", rr.Code)
 		}
 	})
+	t.Run("24時以降開始の録音ボタンにft/toを埋め込む", func(t *testing.T) {
+		now := time.Now()
+		start := now.AddDate(0, 0, -2)
+		start = time.Date(start.Year(), start.Month(), start.Day(), 1, 0, 0, 0, time.Local)
+		end := start.Add(2 * time.Hour)
+		ft := start.Format("20060102150405")
+		to := end.Format("20060102150405")
+		svc := &stubRadikoService{
+			getProgramDetailsFunc: func(stationID, title string) (map[string]interface{}, error) {
+				return map[string]interface{}{"id": stationID, "title": title, "station_id": stationID, "cast": "cast"}, nil
+			},
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"id":    stationID,
+								"title": "late-night",
+								"cast":  "cast",
+								"date":  start.Format("20060102"),
+								"start": "25:00",
+								"end":   "27:00",
+								"ft":    ft,
+								"to":    to,
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
+		r := chi.NewRouter()
+		r.Get("/list/{station_id}/{title}", h.ShowProgramDetail)
+		req := httptest.NewRequest(http.MethodGet, "/list/LFR/late-night", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("got %d, want 200", rr.Code)
+		}
+		var resp struct {
+			LatestBroadcast map[string]interface{}
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if resp.LatestBroadcast["start"] != "25:00" || resp.LatestBroadcast["end"] != "27:00" {
+			t.Fatalf("late-night display times = %#v", resp.LatestBroadcast)
+		}
+		if resp.LatestBroadcast["ft"] != ft || resp.LatestBroadcast["to"] != to {
+			t.Fatalf("ft/to = %#v, want %q/%q", resp.LatestBroadcast, ft, to)
+		}
+	})
 }
 
 func TestBroadcastHandler_GetTwoWeekScheduleByStation(t *testing.T) {

@@ -120,8 +120,10 @@ func TestTemplateSmoke_ProgramDetail(t *testing.T) {
 		},
 		"LatestBroadcast": map[string]interface{}{
 			"date":  "20260405",
-			"start": "10:00",
-			"end":   "12:00",
+			"start": "25:00",
+			"end":   "27:00",
+			"ft":    "20260405010000",
+			"to":    "20260405030000",
 		},
 		"ProgramID":    int64(42),
 		"StationID":    "TBS",
@@ -138,8 +140,15 @@ func TestTemplateSmoke_ProgramDetail(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := executeTemplate(t, root, "web/templates/radioprogram/detail.html", tt.td); err != nil {
+			html, err := renderTemplateString(t, root, "web/templates/radioprogram/detail.html", tt.td)
+			if err != nil {
 				t.Error(err)
+			}
+			if !strings.Contains(html, `data-ft="20260405010000"`) || !strings.Contains(html, `data-to="20260405030000"`) {
+				t.Error("expected recording button ft/to attributes")
+			}
+			if !strings.Contains(html, "start_time: startTime") || !strings.Contains(html, "end_time:   endTime") {
+				t.Error("expected recording payload to use ft/to variables")
 			}
 		})
 	}
@@ -161,6 +170,8 @@ func TestTemplateSmoke_FavoriteIndexTimefreeRecordingButton(t *testing.T) {
 		RecDate        string
 		RecStart       string
 		RecEnd         string
+		RecFt          string
+		RecTo          string
 	}{
 		{
 			ID:             1,
@@ -174,6 +185,8 @@ func TestTemplateSmoke_FavoriteIndexTimefreeRecordingButton(t *testing.T) {
 			RecDate:        "20260601",
 			RecStart:       "10:00",
 			RecEnd:         "12:00",
+			RecFt:          "20260601100000",
+			RecTo:          "20260601120000",
 		},
 		{
 			ID:           2,

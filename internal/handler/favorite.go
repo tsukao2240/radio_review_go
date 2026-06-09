@@ -68,6 +68,8 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 		RecDate        string
 		RecStart       string
 		RecEnd         string
+		RecFt          string
+		RecTo          string
 	}
 	favsWithCast := make([]favWithCast, 0, len(favs))
 	hasRecordable := false
@@ -79,6 +81,8 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 		recDate := ""
 		recStart := ""
 		recEnd := ""
+		recFt := ""
+		recTo := ""
 		if h.radikoService != nil {
 			entries, err := twoWeekEntries(h.radikoService, f.StationID)
 			if err == nil {
@@ -97,7 +101,8 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 					recDate, _ = latest["date"].(string)
 					recStart, _ = latest["start"].(string)
 					recEnd, _ = latest["end"].(string)
-					if recDate != "" && recStart != "" && recEnd != "" {
+					recFt, recTo = recordingTimesFromEntry(latest)
+					if recFt != "" && recTo != "" {
 						recordable = true
 						hasRecordable = true
 						recProgramName = f.ProgramTitle
@@ -118,6 +123,8 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 			RecDate:        recDate,
 			RecStart:       recStart,
 			RecEnd:         recEnd,
+			RecFt:          recFt,
+			RecTo:          recTo,
 		})
 	}
 
@@ -289,10 +296,8 @@ func (h *FavoriteHandler) RecordAll(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		date, _ := latest["date"].(string)
-		start, _ := latest["start"].(string)
-		end, _ := latest["end"].(string)
-		if date == "" || start == "" || end == "" {
+		startTime, endTime := recordingTimesFromEntry(latest)
+		if startTime == "" || endTime == "" {
 			item.Reason = "録音対象の時刻情報が不足しています"
 			resp.Skipped++
 			resp.Items = append(resp.Items, item)
@@ -318,8 +323,8 @@ func (h *FavoriteHandler) RecordAll(w http.ResponseWriter, r *http.Request) {
 			ownerKey,
 			f.StationID,
 			f.ProgramTitle,
-			date+strings.ReplaceAll(start, ":", ""),
-			date+strings.ReplaceAll(end, ":", ""),
+			startTime,
+			endTime,
 			"",
 		)
 		if err != nil {
@@ -343,4 +348,20 @@ func (h *FavoriteHandler) RecordAll(w http.ResponseWriter, r *http.Request) {
 func parseInt(s string) (int, error) {
 	n, err := strconv.Atoi(s)
 	return n, err
+}
+
+func recordingTimesFromEntry(entry map[string]interface{}) (string, string) {
+	ft, _ := entry["ft"].(string)
+	to, _ := entry["to"].(string)
+	if len(ft) == 14 && len(to) == 14 {
+		return ft, to
+	}
+
+	date, _ := entry["date"].(string)
+	start, _ := entry["start"].(string)
+	end, _ := entry["end"].(string)
+	if date == "" || start == "" || end == "" {
+		return "", ""
+	}
+	return date + strings.ReplaceAll(start, ":", ""), date + strings.ReplaceAll(end, ":", "")
 }
