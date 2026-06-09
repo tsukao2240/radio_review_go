@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +29,11 @@ func TestResolveAppKey(t *testing.T) {
 	t.Run("local falls back", func(t *testing.T) {
 		t.Setenv("APP_ENV", "local")
 		t.Setenv("APP_KEY", "")
+		var buf bytes.Buffer
+		orig := log.Writer()
+		log.SetOutput(&buf)
+		t.Cleanup(func() { log.SetOutput(orig) })
+
 		got, err := resolveAppKey()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -34,7 +41,31 @@ func TestResolveAppKey(t *testing.T) {
 		if got == "" {
 			t.Fatal("expected fallback key")
 		}
+		if !strings.Contains(buf.String(), "using insecure default key") {
+			t.Fatalf("expected warning log, got %q", buf.String())
+		}
 	})
+}
+
+func TestMustConnectRedisOptions(t *testing.T) {
+	t.Setenv("REDIS_HOST", "redis.local")
+	t.Setenv("REDIS_PORT", "6380")
+	t.Setenv("REDIS_PASSWORD", "secret")
+	t.Setenv("REDIS_DB", "2")
+
+	rdb := mustConnectRedis()
+	defer rdb.Close()
+
+	opts := rdb.Options()
+	if opts.Addr != "redis.local:6380" {
+		t.Fatalf("Addr = %q, want redis.local:6380", opts.Addr)
+	}
+	if opts.Password != "secret" {
+		t.Fatalf("Password = %q, want secret", opts.Password)
+	}
+	if opts.DB != 2 {
+		t.Fatalf("DB = %d, want 2", opts.DB)
+	}
 }
 
 func TestWriteRouteRateLimitsConfigured(t *testing.T) {
@@ -44,6 +75,7 @@ func TestWriteRouteRateLimitsConfigured(t *testing.T) {
 	}
 	body := string(src)
 	required := []string{
+		`store.Options.Secure = true`,
 		`RateLimit(10, time.Minute)).Post("/review/{id}"`,
 		`RateLimit(20, time.Minute)).Post("/api/posts/comment"`,
 		`RateLimit(30, time.Minute)).Post("/favorites"`,

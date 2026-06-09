@@ -57,6 +57,9 @@ func main() {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
+	if os.Getenv("APP_ENV") == "production" {
+		store.Options.Secure = true
+	}
 
 	// --- Repositories ---
 	userRepo := repository.NewUserRepository(db)
@@ -226,6 +229,8 @@ func main() {
 	})
 
 	// 録音（認証不要）
+	// owner_key はログイン済みなら user_id、ゲストならセッションIDから生成し、
+	// ゲスト録音を維持しつつ録音一覧・履歴を同一所有者に限定する。
 	r.With(appmiddleware.RateLimit(5, time.Minute)).Post("/recording/timefree/start", recordingHandler.StartTimefreeRecording(store))
 	r.Post("/recording/stop", recordingHandler.StopRecording(store))
 	r.Get("/recording/status", recordingHandler.GetRecordingStatus(store))
@@ -316,6 +321,7 @@ func resolveAppKey() (string, error) {
 	if os.Getenv("APP_ENV") == "production" {
 		return "", fmt.Errorf("APP_KEY is required when APP_ENV=production")
 	}
+	log.Println("warning: APP_KEY is not set; using insecure default key for non-production")
 	return "change-me-in-production-32bytes!!", nil
 }
 
@@ -359,15 +365,30 @@ func mustConnectDB() *sqlx.DB {
 	if err != nil {
 		log.Fatalf("failed to open DB: %v", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		log.Fatalf("failed to ping DB: %v", err)
+	}
 	return db
 }
 
 func mustConnectRedis() *redis.Client {
+	db := 0
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			log.Fatalf("invalid REDIS_DB: %v", err)
+		}
+		db = n
+	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%s",
 			getEnvOrDefault("REDIS_HOST", "127.0.0.1"),
 			getEnvOrDefault("REDIS_PORT", "6379"),
 		),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       db,
 	})
 	return rdb
 }
