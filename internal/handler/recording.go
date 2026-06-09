@@ -46,12 +46,15 @@ func NewRecordingHandler(
 // ownerKey はリクエストからオーナーキーを生成する。
 // ログイン済みなら "user_{id}"、ゲストならセッションに保存したUUIDベースの "session_{guestID}"。
 func (h *RecordingHandler) ownerKey(r *http.Request, w http.ResponseWriter, store sessions.Store) (string, error) {
-	if userID, ok := middleware.GetUserID(r.Context()); ok {
-		return fmt.Sprintf("user_%d", userID), nil
-	}
 	session, err := store.Get(r, "radio_review_session")
 	if err != nil {
 		return "", err
+	}
+	if userID, ok := session.Values["user_id"].(int64); ok {
+		return fmt.Sprintf("user_%d", userID), nil
+	}
+	if userID, ok := middleware.GetUserID(r.Context()); ok {
+		return fmt.Sprintf("user_%d", userID), nil
 	}
 	guestID, _ := session.Values["guest_owner_id"].(string)
 	if guestID == "" {

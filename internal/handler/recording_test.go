@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -366,6 +367,26 @@ func requestWithGuestOwner(t *testing.T, method, target string, store sessions.S
 		t.Fatalf("store.Get: %v", err)
 	}
 	session.Values["guest_owner_id"] = ownerID
+	if err := session.Save(setupReq, setupRR); err != nil {
+		t.Fatalf("session.Save: %v", err)
+	}
+
+	req := httptest.NewRequest(method, target, nil)
+	for _, c := range setupRR.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	return req
+}
+
+func requestWithSessionUser(t *testing.T, method, target string, store sessions.Store, userID int64) *http.Request {
+	t.Helper()
+	setupReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	setupRR := httptest.NewRecorder()
+	session, err := store.Get(setupReq, "radio_review_session")
+	if err != nil {
+		t.Fatalf("store.Get: %v", err)
+	}
+	session.Values["user_id"] = userID
 	if err := session.Save(setupReq, setupRR); err != nil {
 		t.Fatalf("session.Save: %v", err)
 	}
@@ -795,6 +816,22 @@ func TestOwnerKey_WithUserID(t *testing.T) {
 	}
 }
 
+func TestOwnerKey_WithSessionUserID(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	req := requestWithSessionUser(t, http.MethodGet, "/", store, 42)
+	rr := httptest.NewRecorder()
+	key, err := h.ownerKey(req, rr, store)
+	if err != nil {
+		t.Fatalf("ownerKey: %v", err)
+	}
+	if key != "user_42" {
+		t.Errorf("expected user_42, got %q", key)
+	}
+}
+
 func TestOwnerKey_GuestSession(t *testing.T) {
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
@@ -808,6 +845,85 @@ func TestOwnerKey_GuestSession(t *testing.T) {
 	}
 	if len(key) == 0 {
 		t.Error("expected non-empty owner key for guest")
+	}
+}
+
+func TestListRecordings_WithSessionUserReturnsUserRecordings(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	userInfo := &model.RecordingInfo{
+		RecordingID: "bulk001",
+		OwnerKey:    "user_7",
+		Status:      "completed",
+		ProgramName: "Bulk Program",
+	}
+	otherInfo := &model.RecordingInfo{
+		RecordingID: "other001",
+		OwnerKey:    "user_8",
+		Status:      "completed",
+		ProgramName: "Other Program",
+	}
+	userData, _ := json.Marshal(userInfo)
+	otherData, _ := json.Marshal(otherInfo)
+	rdb.Set(context.Background(), "recording_bulk001", string(userData), 0)
+	rdb.Set(context.Background(), "recording_other001", string(otherData), 0)
+
+	req := requestWithSessionUser(t, http.MethodGet, "/recording/list", store, 7)
+	rr := httptest.NewRecorder()
+	h.ListRecordings(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "bulk001") {
+		t.Fatalf("expected bulk recording in response: %s", body)
+	}
+	if strings.Contains(body, "other001") {
+		t.Fatalf("unexpected other owner recording in response: %s", body)
+	}
+}
+
+func TestShowHistory_WithSessionUserReturnsUserRecordings(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	store := sessions.NewCookieStore([]byte("test"))
+
+	userInfo := &model.RecordingInfo{
+		RecordingID: "bulk_history",
+		StationID:   "TBS",
+		OwnerKey:    "user_7",
+		Status:      "completed",
+		ProgramName: "Bulk History Program",
+		CreatedAt:   "2026-06-09T12:00:00+09:00",
+	}
+	otherInfo := &model.RecordingInfo{
+		RecordingID: "other_history",
+		StationID:   "QRR",
+		OwnerKey:    "user_8",
+		Status:      "completed",
+		ProgramName: "Other History Program",
+	}
+	userData, _ := json.Marshal(userInfo)
+	otherData, _ := json.Marshal(otherInfo)
+	rdb.Set(context.Background(), "recording_bulk_history", string(userData), 0)
+	rdb.Set(context.Background(), "recording_other_history", string(otherData), 0)
+
+	req := requestWithSessionUser(t, http.MethodGet, "/recording/history", store, 7)
+	rr := httptest.NewRecorder()
+	h.ShowHistory(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "bulk_history") {
+		t.Fatalf("expected bulk recording in response: %s", body)
+	}
+	if strings.Contains(body, "other_history") {
+		t.Fatalf("unexpected other owner recording in response: %s", body)
 	}
 }
 
