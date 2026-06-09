@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/sessions"
 	"github.com/yourname/radio_review_go/internal/middleware"
@@ -15,6 +18,12 @@ type FavoriteHandler struct {
 	favService    service.FavoriteServiceInterface
 	radikoService service.RadikoApiServiceInterface
 	store         sessions.Store
+	recorder      favoriteRecorder
+}
+
+type favoriteRecorder interface {
+	StartTimefree(ctx context.Context, ownerKey, stationID, programName, startTime, endTime, areaID string) (string, error)
+	IsProgramRecording(ctx context.Context, ownerKey, programName string) (bool, error)
 }
 
 // NewFavoriteHandler は新しい FavoriteHandler を返す。
@@ -24,6 +33,11 @@ func NewFavoriteHandler(favService service.FavoriteServiceInterface, radikoServi
 		radikoService: radikoService,
 		store:         store,
 	}
+}
+
+// SetRecorder は一括タイムフリー録音で使用する録音開始処理を設定する。
+func (h *FavoriteHandler) SetRecorder(recorder favoriteRecorder) {
+	h.recorder = recorder
 }
 
 // Index は GET /favorites を処理する。お気に入り一覧。
@@ -56,6 +70,7 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 		RecEnd         string
 	}
 	favsWithCast := make([]favWithCast, 0, len(favs))
+	hasRecordable := false
 	for _, f := range favs {
 		cast := ""
 		nextDate := ""
@@ -84,6 +99,7 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 					recEnd, _ = latest["end"].(string)
 					if recDate != "" && recStart != "" && recEnd != "" {
 						recordable = true
+						hasRecordable = true
 						recProgramName = f.ProgramTitle
 					}
 				}
@@ -106,7 +122,8 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderOrJSON(w, r, "web/templates/favorite/index.html", map[string]interface{}{
-		"Favorites": favsWithCast,
+		"Favorites":     favsWithCast,
+		"HasRecordable": hasRecordable,
 	})
 }
 
@@ -208,6 +225,118 @@ func (h *FavoriteHandler) Check(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]bool{"is_favorite": exists})
+}
+
+type recordAllFavoriteItem struct {
+	ProgramName string `json:"program_name"`
+	StationID   string `json:"station_id"`
+	Status      string `json:"status"`
+	Reason      string `json:"reason,omitempty"`
+	RecordingID string `json:"recording_id,omitempty"`
+}
+
+type recordAllFavoritesResponse struct {
+	Total   int                     `json:"total"`
+	Started int                     `json:"started"`
+	Skipped int                     `json:"skipped"`
+	Items   []recordAllFavoriteItem `json:"items"`
+}
+
+// RecordAll は POST /favorites/record-all を処理する。
+func (h *FavoriteHandler) RecordAll(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if h.recorder == nil || h.radikoService == nil {
+		writeError(w, http.StatusInternalServerError, "一括録音の初期化が完了していません")
+		return
+	}
+
+	favs, err := h.favService.GetByUser(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "お気に入り一覧の取得に失敗しました: "+err.Error())
+		return
+	}
+
+	ownerKey := fmt.Sprintf("user_%d", userID)
+	resp := recordAllFavoritesResponse{
+		Total: len(favs),
+		Items: make([]recordAllFavoriteItem, 0, len(favs)),
+	}
+
+	for _, f := range favs {
+		item := recordAllFavoriteItem{
+			ProgramName: f.ProgramTitle,
+			StationID:   f.StationID,
+			Status:      "skipped",
+		}
+
+		entries, err := twoWeekEntries(h.radikoService, f.StationID)
+		if err != nil {
+			item.Reason = "番組表の取得に失敗しました"
+			resp.Skipped++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+
+		latest := findLatestTimefreeFromEntries(entries, f.ProgramTitle, f.BroadcastDay)
+		if latest == nil {
+			item.Reason = "録音可能なタイムフリー放送がありません"
+			resp.Skipped++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+
+		date, _ := latest["date"].(string)
+		start, _ := latest["start"].(string)
+		end, _ := latest["end"].(string)
+		if date == "" || start == "" || end == "" {
+			item.Reason = "録音対象の時刻情報が不足しています"
+			resp.Skipped++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+
+		recording, err := h.recorder.IsProgramRecording(r.Context(), ownerKey, f.ProgramTitle)
+		if err != nil {
+			item.Reason = "録音状態の確認に失敗しました"
+			resp.Skipped++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+		if recording {
+			item.Reason = "同じ番組が録音中です"
+			resp.Skipped++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+
+		recordingID, err := h.recorder.StartTimefree(
+			r.Context(),
+			ownerKey,
+			f.StationID,
+			f.ProgramTitle,
+			date+strings.ReplaceAll(start, ":", ""),
+			date+strings.ReplaceAll(end, ":", ""),
+			"",
+		)
+		if err != nil {
+			item.Reason = err.Error()
+			resp.Skipped++
+			resp.Items = append(resp.Items, item)
+			continue
+		}
+
+		item.Status = "started"
+		item.Reason = ""
+		item.RecordingID = recordingID
+		resp.Started++
+		resp.Items = append(resp.Items, item)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // parseInt は文字列を int に変換するヘルパー。

@@ -51,6 +51,25 @@ func (s *stubFavService) Check(userID int64, stationID, programTitle string, bro
 
 var _ service.FavoriteServiceInterface = (*stubFavService)(nil)
 
+type stubFavoriteRecorder struct {
+	startFunc       func(ctx context.Context, ownerKey, stationID, programName, startTime, endTime, areaID string) (string, error)
+	isRecordingFunc func(ctx context.Context, ownerKey, programName string) (bool, error)
+}
+
+func (s *stubFavoriteRecorder) StartTimefree(ctx context.Context, ownerKey, stationID, programName, startTime, endTime, areaID string) (string, error) {
+	if s.startFunc != nil {
+		return s.startFunc(ctx, ownerKey, stationID, programName, startTime, endTime, areaID)
+	}
+	return "rec-1", nil
+}
+
+func (s *stubFavoriteRecorder) IsProgramRecording(ctx context.Context, ownerKey, programName string) (bool, error) {
+	if s.isRecordingFunc != nil {
+		return s.isRecordingFunc(ctx, ownerKey, programName)
+	}
+	return false, nil
+}
+
 // withUserID はテスト用にユーザーIDをコンテキストに埋め込む。
 func withUserID(r *http.Request, userID int64) *http.Request {
 	ctx := context.WithValue(r.Context(), middleware.UserContextKey, userID)
@@ -237,6 +256,141 @@ func TestFavoriteHandler_Check(t *testing.T) {
 			t.Error("unauthenticated should return is_favorite=false")
 		}
 	})
+}
+
+func TestFavoriteHandler_RecordAll(t *testing.T) {
+	now := time.Now()
+	matchingEnd := now.AddDate(0, 0, -2)
+	matchingStart := matchingEnd.Add(-1 * time.Hour)
+	otherEnd := now.AddDate(0, 0, -1)
+	otherStart := otherEnd.Add(-1 * time.Hour)
+	broadcastDay := (int(matchingStart.Weekday()) + 6) % 7
+
+	favs := []model.FavoriteProgram{
+		{ID: 1, UserID: 7, StationID: "TBS", ProgramTitle: "daily", BroadcastDay: &broadcastDay, CreatedAt: now},
+		{ID: 2, UserID: 7, StationID: "TBS", ProgramTitle: "missing", CreatedAt: now},
+		{ID: 3, UserID: 7, StationID: "QRR", ProgramTitle: "duplicate", CreatedAt: now},
+	}
+
+	svc := &stubFavService{
+		getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+			if userID != 7 {
+				t.Fatalf("userID = %d, want 7", userID)
+			}
+			return favs, nil
+		},
+	}
+	radiko := &stubRadikoService{
+		getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+			switch stationID {
+			case "TBS":
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"title": "daily",
+								"date":  matchingStart.Format("20060102"),
+								"start": matchingStart.Format("15:04"),
+								"end":   matchingEnd.Format("15:04"),
+								"ft":    matchingStart.Format("20060102150405"),
+								"to":    matchingEnd.Format("20060102150405"),
+							},
+							{
+								"title": "daily",
+								"date":  otherStart.Format("20060102"),
+								"start": otherStart.Format("15:04"),
+								"end":   otherEnd.Format("15:04"),
+								"ft":    otherStart.Format("20060102150405"),
+								"to":    otherEnd.Format("20060102150405"),
+							},
+						},
+					},
+				}, nil
+			case "QRR":
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"title": "duplicate",
+								"date":  otherStart.Format("20060102"),
+								"start": otherStart.Format("15:04"),
+								"end":   otherEnd.Format("15:04"),
+								"ft":    otherStart.Format("20060102150405"),
+								"to":    otherEnd.Format("20060102150405"),
+							},
+						},
+					},
+				}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+
+	var starts []map[string]string
+	recorder := &stubFavoriteRecorder{
+		isRecordingFunc: func(ctx context.Context, ownerKey, programName string) (bool, error) {
+			if ownerKey != "user_7" {
+				t.Fatalf("ownerKey = %q, want user_7", ownerKey)
+			}
+			return programName == "duplicate", nil
+		},
+		startFunc: func(ctx context.Context, ownerKey, stationID, programName, startTime, endTime, areaID string) (string, error) {
+			starts = append(starts, map[string]string{
+				"ownerKey":    ownerKey,
+				"stationID":   stationID,
+				"programName": programName,
+				"startTime":   startTime,
+				"endTime":     endTime,
+				"areaID":      areaID,
+			})
+			return "rec-daily", nil
+		},
+	}
+
+	h := NewFavoriteHandler(svc, radiko, nil)
+	h.SetRecorder(recorder)
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/favorites/record-all", nil), 7)
+	rr := httptest.NewRecorder()
+	h.RecordAll(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200", rr.Code)
+	}
+	var resp recordAllFavoritesResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if resp.Total != 3 || resp.Started != 1 || resp.Skipped != 2 {
+		t.Fatalf("summary = %#v", resp)
+	}
+	if len(starts) != 1 {
+		t.Fatalf("starts len = %d, want 1", len(starts))
+	}
+	wantStart := matchingStart.Format("20060102") + strings.ReplaceAll(matchingStart.Format("15:04"), ":", "")
+	wantEnd := matchingEnd.Format("20060102") + strings.ReplaceAll(matchingEnd.Format("15:04"), ":", "")
+	if starts[0]["programName"] != "daily" || starts[0]["startTime"] != wantStart || starts[0]["endTime"] != wantEnd {
+		t.Fatalf("start args = %#v", starts[0])
+	}
+	if resp.Items[0].Status != "started" || resp.Items[0].RecordingID != "rec-daily" {
+		t.Fatalf("first item = %#v", resp.Items[0])
+	}
+	if resp.Items[1].Status != "skipped" || resp.Items[1].Reason == "" {
+		t.Fatalf("second item = %#v", resp.Items[1])
+	}
+	if resp.Items[2].Status != "skipped" || resp.Items[2].Reason != "同じ番組が録音中です" {
+		t.Fatalf("third item = %#v", resp.Items[2])
+	}
+}
+
+func TestFavoriteHandler_RecordAll_Unauthorized(t *testing.T) {
+	h := NewFavoriteHandler(&stubFavService{}, nil, nil)
+	req := httptest.NewRequest(http.MethodPost, "/favorites/record-all", nil)
+	rr := httptest.NewRecorder()
+	h.RecordAll(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d, want 401", rr.Code)
+	}
 }
 
 func TestFavoriteHandler_Index(t *testing.T) {

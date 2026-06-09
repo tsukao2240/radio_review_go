@@ -114,6 +114,85 @@ func (h *RecordingHandler) validateRecordingFilePath(filePath string) bool {
 	return strings.HasPrefix(cleanPath, storageRoot)
 }
 
+// StartTimefree はタイムフリー録音を開始し、非同期で HLS ダウンロードを実行する。
+func (h *RecordingHandler) StartTimefree(ctx context.Context, ownerKey, stationID, programName, startTime, endTime, areaID string) (string, error) {
+	if areaID == "" {
+		areaID = radiko.GetAreaIDFromStationID(stationID)
+	}
+
+	authToken, err := h.radikoClient.GetAuthToken(ctx, areaID)
+	if err != nil {
+		return "", fmt.Errorf("Radiko認証トークンの取得に失敗しました: %w", err)
+	}
+
+	recordingID := fmt.Sprintf("%d", time.Now().UnixNano())
+	safeProgName := strings.ReplaceAll(programName, "/", "_")
+	fileName := fmt.Sprintf("%s_%s.aac", recordingID, safeProgName)
+	filePath := filepath.Join(h.storagePath, fileName)
+
+	info := &model.RecordingInfo{
+		RecordingID: recordingID,
+		StationID:   stationID,
+		ProgramName: programName,
+		StartTime:   startTime,
+		EndTime:     endTime,
+		Status:      "recording",
+		FilePath:    filePath,
+		OwnerKey:    ownerKey,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	}
+
+	if err := h.saveRecordingInfo(ctx, info, 2*time.Hour); err != nil {
+		return "", fmt.Errorf("録音情報の保存に失敗しました: %w", err)
+	}
+
+	go func() {
+		bgCtx := context.Background()
+
+		if err := os.MkdirAll(h.storagePath, 0755); err != nil {
+			log.Printf("StartTimefree: mkdir storage failed recording_id=%s path=%s: %v", recordingID, h.storagePath, err)
+		}
+
+		dlErr := h.hlsDownloader.DownloadTimefree(bgCtx, authToken, stationID, startTime, endTime, areaID, filePath)
+
+		updated, loadErr := h.loadRecordingInfo(bgCtx, recordingID)
+		if loadErr != nil {
+			log.Printf("StartTimefree: load recording info failed recording_id=%s: %v", recordingID, loadErr)
+			return
+		}
+		if updated.Status == "stopped" {
+			return
+		}
+		if dlErr != nil {
+			updated.Status = "failed"
+			updated.FailReason = dlErr.Error()
+			log.Printf("StartTimefree: download failed recording_id=%s station_id=%s start=%s end=%s: %v", recordingID, stationID, startTime, endTime, dlErr)
+		} else {
+			updated.Status = "completed"
+			updated.FailReason = ""
+		}
+		if err := h.saveRecordingInfo(bgCtx, updated, 2*time.Hour); err != nil {
+			log.Printf("StartTimefree: save recording info failed recording_id=%s: %v", recordingID, err)
+		}
+	}()
+
+	return recordingID, nil
+}
+
+// IsProgramRecording は同一オーナーの同一番組が録音中かを返す。
+func (h *RecordingHandler) IsProgramRecording(ctx context.Context, ownerKey, programName string) (bool, error) {
+	recordings, err := h.listOwnerRecordings(ctx, ownerKey)
+	if err != nil {
+		return false, err
+	}
+	for _, rec := range recordings {
+		if rec.ProgramName == programName && rec.Status == "recording" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // StartTimefreeRecording は POST /recording/timefree/start を処理する。
 // タイムフリー録音を開始し、非同期で HLS ダウンロードを実行する。
 func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.HandlerFunc {
@@ -137,82 +216,17 @@ func (h *RecordingHandler) StartTimefreeRecording(store sessions.Store) http.Han
 			return
 		}
 
-		areaID := req.AreaID
-		if areaID == "" {
-			areaID = radiko.GetAreaIDFromStationID(req.StationID)
-		}
-
-		// 認証トークン取得
-		authToken, err := h.radikoClient.GetAuthToken(r.Context(), areaID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "Radiko認証トークンの取得に失敗しました: "+err.Error())
-			return
-		}
-
-		// recording_id 生成
-		recordingID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-		// ファイルパス生成
-		safeProgName := strings.ReplaceAll(req.ProgramName, "/", "_")
-		fileName := fmt.Sprintf("%s_%s.aac", recordingID, safeProgName)
-		filePath := filepath.Join(h.storagePath, fileName)
-
 		ownerKey, err := h.ownerKey(r, w, store)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
 			return
 		}
 
-		info := &model.RecordingInfo{
-			RecordingID: recordingID,
-			StationID:   req.StationID,
-			ProgramName: req.ProgramName,
-			StartTime:   req.StartTime,
-			EndTime:     req.EndTime,
-			Status:      "recording",
-			FilePath:    filePath,
-			OwnerKey:    ownerKey,
-			CreatedAt:   time.Now().Format(time.RFC3339),
-		}
-
-		if err := h.saveRecordingInfo(r.Context(), info, 2*time.Hour); err != nil {
-			writeError(w, http.StatusInternalServerError, "録音情報の保存に失敗しました: "+err.Error())
+		recordingID, err := h.StartTimefree(r.Context(), ownerKey, req.StationID, req.ProgramName, req.StartTime, req.EndTime, req.AreaID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-
-		// 非同期で HLS ダウンロード実行
-		go func() {
-			ctx := context.Background()
-
-			// ストレージディレクトリを作成（存在しない場合）
-			if err := os.MkdirAll(h.storagePath, 0755); err != nil {
-				log.Printf("StartTimefreeRecording: mkdir storage failed recording_id=%s path=%s: %v", recordingID, h.storagePath, err)
-			}
-
-			dlErr := h.hlsDownloader.DownloadTimefree(ctx, authToken, req.StationID, req.StartTime, req.EndTime, areaID, filePath)
-
-			// ステータス更新
-			updated, loadErr := h.loadRecordingInfo(ctx, recordingID)
-			if loadErr != nil {
-				log.Printf("StartTimefreeRecording: load recording info failed recording_id=%s: %v", recordingID, loadErr)
-				return
-			}
-			if updated.Status == "stopped" {
-				// 停止済みはそのまま
-				return
-			}
-			if dlErr != nil {
-				updated.Status = "failed"
-				updated.FailReason = dlErr.Error()
-				log.Printf("StartTimefreeRecording: download failed recording_id=%s station_id=%s start=%s end=%s: %v", recordingID, req.StationID, req.StartTime, req.EndTime, dlErr)
-			} else {
-				updated.Status = "completed"
-				updated.FailReason = ""
-			}
-			if err := h.saveRecordingInfo(ctx, updated, 2*time.Hour); err != nil {
-				log.Printf("StartTimefreeRecording: save recording info failed recording_id=%s: %v", recordingID, err)
-			}
-		}()
 
 		writeJSON(w, http.StatusOK, map[string]string{
 			"recording_id": recordingID,

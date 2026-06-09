@@ -237,6 +237,97 @@ func TestStartTimefreeRecording_ResolvesAreaFromStationID(t *testing.T) {
 	}
 }
 
+func TestStartTimefree_CoreStoresOwnerAndStartsDownload(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	dir := t.TempDir()
+
+	authArea := make(chan string, 1)
+	downloadArgs := make(chan map[string]string)
+	h := NewRecordingHandler(&stubRadikoClient{
+		getAuthTokenFunc: func(ctx context.Context, areaID string) (string, error) {
+			authArea <- areaID
+			return "core-token", nil
+		},
+	}, &stubHLSDownloader{
+		downloadFunc: func(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error {
+			downloadArgs <- map[string]string{
+				"authToken": authToken,
+				"stationID": stationID,
+				"startTime": startTime,
+				"endTime":   endTime,
+				"areaID":    areaID,
+			}
+			return nil
+		},
+	}, rdb, dir)
+
+	recordingID, err := h.StartTimefree(context.Background(), "user_9", "OBC", "Core Show", "202401011000", "202401011100", "")
+	if err != nil {
+		t.Fatalf("StartTimefree: %v", err)
+	}
+	if recordingID == "" {
+		t.Fatal("expected recordingID")
+	}
+	if got := <-authArea; got != "JP27" {
+		t.Fatalf("auth area = %q, want JP27", got)
+	}
+
+	info, err := h.loadRecordingInfo(context.Background(), recordingID)
+	if err != nil {
+		t.Fatalf("loadRecordingInfo: %v", err)
+	}
+	if info.OwnerKey != "user_9" || info.ProgramName != "Core Show" || info.Status != "recording" {
+		t.Fatalf("stored info = %#v", info)
+	}
+
+	select {
+	case got := <-downloadArgs:
+		if got["authToken"] != "core-token" || got["areaID"] != "JP27" || got["stationID"] != "OBC" {
+			t.Fatalf("download args = %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for download")
+	}
+}
+
+func TestIsProgramRecording(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
+	ctx := context.Background()
+
+	if err := h.saveRecordingInfo(ctx, &model.RecordingInfo{
+		RecordingID: "active",
+		ProgramName: "Jazz",
+		Status:      "recording",
+		OwnerKey:    "user_1",
+	}, 2*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.saveRecordingInfo(ctx, &model.RecordingInfo{
+		RecordingID: "done",
+		ProgramName: "News",
+		Status:      "completed",
+		OwnerKey:    "user_1",
+	}, 2*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := h.IsProgramRecording(ctx, "user_1", "Jazz")
+	if err != nil {
+		t.Fatalf("IsProgramRecording: %v", err)
+	}
+	if !got {
+		t.Fatal("expected Jazz recording")
+	}
+	got, err = h.IsProgramRecording(ctx, "user_1", "News")
+	if err != nil {
+		t.Fatalf("IsProgramRecording: %v", err)
+	}
+	if got {
+		t.Fatal("expected completed program not recording")
+	}
+}
+
 func TestRecordingOwnerKey_GuestStableInSession(t *testing.T) {
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())

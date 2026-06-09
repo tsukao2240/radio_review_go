@@ -17,7 +17,16 @@
 
   {{ with .Data }}
   {{ $favorites := index . "Favorites" }}
+  {{ $hasRecordable := index . "HasRecordable" }}
   {{ if $favorites }}
+  {{ if $hasRecordable }}
+  <div class="mb-4 flex justify-end">
+    <button id="record-all-favorites-btn"
+            class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold">
+      <i class="fas fa-microphone mr-2"></i>お気に入りを一括録音
+    </button>
+  </div>
+  {{ end }}
   <div class="space-y-4">
     {{ range $favorites }}
     <div class="card-base">
@@ -128,6 +137,58 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+
+    var recordAllBtn = document.getElementById('record-all-favorites-btn');
+    if (recordAllBtn) {
+        recordAllBtn.addEventListener('click', function() {
+            if (!confirm('録音可能なお気に入り番組を一括録音しますか？')) {
+                return;
+            }
+
+            recordAllBtn.disabled = true;
+
+            fetch('/favorites/record-all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({})
+            })
+            .then(function(response) {
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return null;
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                if (!data) {
+                    return;
+                }
+                if (data.error) {
+                    window.toast ? window.toast.error('一括録音に失敗しました: ' + data.error) : alert('一括録音に失敗しました: ' + data.error);
+                    return;
+                }
+
+                var message = '一括録音: 開始 ' + data.started + ' 件 / スキップ ' + data.skipped + ' 件';
+                if (window.toast) {
+                    window.toast.success(message);
+                } else {
+                    alert(message);
+                }
+                if (data.started > 0) {
+                    setTimeout(function() { window.location.href = '/recording/history'; }, 2000);
+                }
+            })
+            .catch(function(error) {
+                window.toast ? window.toast.error('一括録音リクエスト中にエラーが発生しました: ' + error) : alert('一括録音リクエスト中にエラーが発生しました: ' + error);
+            })
+            .finally(function() {
+                recordAllBtn.disabled = false;
+            });
+        });
+    }
 
     document.querySelectorAll('.timefree-recording-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {

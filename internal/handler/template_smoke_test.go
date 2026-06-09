@@ -184,7 +184,8 @@ func TestTemplateSmoke_FavoriteIndexTimefreeRecordingButton(t *testing.T) {
 	}
 
 	html, err := renderTemplateString(t, root, "web/templates/favorite/index.html", loggedInTD(map[string]interface{}{
-		"Favorites": favorites,
+		"Favorites":     favorites,
+		"HasRecordable": true,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -198,6 +199,12 @@ func TestTemplateSmoke_FavoriteIndexTimefreeRecordingButton(t *testing.T) {
 	}
 	if !strings.Contains(html, `fetch('/recording/timefree/start'`) {
 		t.Error("expected timefree recording fetch")
+	}
+	if !strings.Contains(html, "お気に入りを一括録音") {
+		t.Error("expected record-all button text")
+	}
+	if !strings.Contains(html, `fetch('/favorites/record-all'`) {
+		t.Error("expected record-all fetch")
 	}
 	if !strings.Contains(html, "直近放送日: 2026/06/01 (月)") {
 		t.Error("expected latest broadcast date text")
@@ -303,6 +310,7 @@ func TestTemplateSmoke_Favorites(t *testing.T) {
 				NextDate:     "20260407",
 			},
 		},
+		"HasRecordable": false,
 	}
 
 	if err := executeTemplate(t, root, "web/templates/favorite/index.html", loggedInTD(data)); err != nil {
