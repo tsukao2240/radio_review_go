@@ -44,9 +44,19 @@ go test ./...
 
 テストが全件パスしてからコミットすること。1件でも失敗した場合はコミット禁止。
 
-3. **コミット**
+3. **lint 実行（CIと同一）**
 
-`git status` の確認とテストパスの両方が完了してからコミットすること。
+```bash
+gofmt -l .
+go vet ./...
+go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+```
+
+CI（.github/workflows/ci.yml）は golangci-lint v1.64.8 を実行する。`go test`/`go vet` では検出できない指摘（未使用関数 `unused` 等）があるため、コミット前・報告前に必ずこの lint を実行し 0 件であることを確認すること。`gofmt -l .` は出力空であること。1 件でも指摘が残る場合はコミット禁止。ローカル検証項目と CI 検証項目を常に一致させる。
+
+4. **コミット**
+
+`git status` の確認、テストパス、lint 0 件の三点が完了してからコミットすること。
 
 **`git push` は絶対に行わないこと。プッシュはユーザーが手動で行う。**
 
