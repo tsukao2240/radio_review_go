@@ -7,7 +7,7 @@ PHP/Laravel版（`../radio_review/`）をGoで書き直したもの。
 
 | 放送中の番組 | 2週間番組表（タイムフリー） |
 |---|---|
-| ![放送中の番組](screenshot_schedule.png) | ![2週間番組表](screenshot_twoweek.png) |
+| ![放送中の番組](docs/screenshot_schedule.png) | ![2週間番組表](docs/screenshot_twoweek.png) |
 
 ## 主な機能
 
