@@ -252,11 +252,12 @@ func TestStartTimefree_CoreStoresOwnerAndStartsDownload(t *testing.T) {
 	}, &stubHLSDownloader{
 		downloadFunc: func(ctx context.Context, authToken, stationID, startTime, endTime, areaID, outputPath string) error {
 			downloadArgs <- map[string]string{
-				"authToken": authToken,
-				"stationID": stationID,
-				"startTime": startTime,
-				"endTime":   endTime,
-				"areaID":    areaID,
+				"authToken":  authToken,
+				"stationID":  stationID,
+				"startTime":  startTime,
+				"endTime":    endTime,
+				"areaID":     areaID,
+				"outputPath": outputPath,
 			}
 			return nil
 		},
@@ -280,11 +281,17 @@ func TestStartTimefree_CoreStoresOwnerAndStartsDownload(t *testing.T) {
 	if info.OwnerKey != "user_9" || info.ProgramName != "Core Show" || info.Status != "recording" {
 		t.Fatalf("stored info = %#v", info)
 	}
+	if !strings.Contains(filepath.Base(info.FilePath), "2024-01-01_1000_OBC_Core Show.aac") {
+		t.Fatalf("file path = %q", info.FilePath)
+	}
 
 	select {
 	case got := <-downloadArgs:
 		if got["authToken"] != "core-token" || got["areaID"] != "JP27" || got["stationID"] != "OBC" {
 			t.Fatalf("download args = %#v", got)
+		}
+		if got["outputPath"] != info.FilePath {
+			t.Fatalf("output path = %q, want %q", got["outputPath"], info.FilePath)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for download")
@@ -666,7 +673,7 @@ func TestDownloadRecording_Success(t *testing.T) {
 	store := sessions.NewCookieStore([]byte("test"))
 
 	// Create a real file to serve.
-	filePath := dir + "/test.aac"
+	filePath := filepath.Join(dir, "2026-06-05_0100_TBS_Jazz Show.aac")
 	if err := os.WriteFile(filePath, []byte("audio-data"), 0600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -687,6 +694,9 @@ func TestDownloadRecording_Success(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
+	}
+	if cd := rr.Header().Get("Content-Disposition"); !strings.Contains(cd, `filename="2026-06-05_0100_TBS_Jazz Show.aac"`) {
+		t.Fatalf("Content-Disposition = %q", cd)
 	}
 }
 
@@ -1083,5 +1093,47 @@ func TestStreamRecording_CompletedServesFile(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "audio/aac" {
 		t.Errorf("Content-Type = %q, want audio/aac", ct)
+	}
+}
+
+func TestStreamRecording_RangeRequest(t *testing.T) {
+	_, rdb := newMiniRedis(t)
+	dir := t.TempDir()
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+	store := sessions.NewCookieStore([]byte("test-secret"))
+
+	filePath := filepath.Join(dir, "2026-06-05_0100_TBS_Range.aac")
+	if err := os.WriteFile(filePath, []byte("0123456789"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	info := &model.RecordingInfo{
+		RecordingID: "range1",
+		Status:      "completed",
+		OwnerKey:    "session_guest456",
+		FilePath:    filePath,
+		ProgramName: "Range",
+		StationID:   "TBS",
+		StartTime:   "20260605010000",
+	}
+	data, _ := json.Marshal(info)
+	rdb.Set(context.Background(), "recording_range1", string(data), 0)
+
+	req := requestWithGuestOwner(t, http.MethodGet, "/recording/stream?recording_id=range1", store, "guest456")
+	req.Header.Set("Range", "bytes=2-5")
+	w := httptest.NewRecorder()
+	h.StreamRecording(store)(w, req)
+
+	if w.Code != http.StatusPartialContent {
+		t.Fatalf("got %d, want %d", w.Code, http.StatusPartialContent)
+	}
+	if got := w.Body.String(); got != "2345" {
+		t.Fatalf("body = %q, want 2345", got)
+	}
+	if cr := w.Header().Get("Content-Range"); cr != "bytes 2-5/10" {
+		t.Fatalf("Content-Range = %q", cr)
+	}
+	if ar := w.Header().Get("Accept-Ranges"); ar != "bytes" {
+		t.Fatalf("Accept-Ranges = %q", ar)
 	}
 }

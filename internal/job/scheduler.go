@@ -20,6 +20,8 @@ import (
 
 	appmetrics "github.com/tsukao2240/radio_review_go/internal/metrics"
 	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/recordingfile"
+	"github.com/tsukao2240/radio_review_go/internal/recordingmeta"
 	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
@@ -572,8 +574,7 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 	// 出力ファイルパス作成
 	startFmt := sc.ScheduledStartTime.Format("200601021504")
 	endFmt := sc.ScheduledEndTime.Format("200601021504")
-	fileName := fmt.Sprintf("%s_%s_%s.aac", sc.StationID, startFmt, endFmt)
-	outputPath := filepath.Join(s.storagePath, fileName)
+	outputPath := recordingfile.NewPath(s.storagePath, recordingID, startFmt, sc.StationID, sc.ProgramTitle)
 
 	if err := os.MkdirAll(s.storagePath, 0755); err != nil {
 		errMsg := fmt.Sprintf("保存ディレクトリ作成エラー: %v", err)
@@ -616,6 +617,10 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed", errMsg)
 		s.notifyRecordingFailed(sc, errMsg)
 		return
+	}
+
+	if err := recordingmeta.TagAAC(ctx, info); err != nil {
+		slog.Warn("[job] recording metadata tagging skipped", "id", sc.ID, "recording_id", recordingID, "error", err)
 	}
 
 	// 完了処理
