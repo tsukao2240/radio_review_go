@@ -772,40 +772,6 @@ func updateRedisRecordingStatus(ctx context.Context, rdb *redis.Client, recordin
 	return rdb.Set(ctx, key, string(b), ttl).Err()
 }
 
-// createRecordingStartNotification は録音開始通知を notifications テーブルに INSERT する。
-func createRecordingStartNotification(db *sqlx.DB, sc *model.RecordingSchedule, recordingID string) error {
-	dataJSON, _ := json.Marshal(map[string]string{
-		"station_id":   sc.StationID,
-		"recording_id": recordingID,
-	})
-	dataStr := string(dataJSON)
-	n := &model.Notification{
-		UserID:  sc.UserID,
-		Type:    "recording_start",
-		Title:   "録音開始",
-		Message: fmt.Sprintf("「%s」の録音を開始しました", sc.ProgramTitle),
-		Data:    &dataStr,
-	}
-	return insertNotification(db, n)
-}
-
-// createRecordingFailedNotification は録音失敗通知を notifications テーブルに INSERT する。
-func createRecordingFailedNotification(db *sqlx.DB, sc *model.RecordingSchedule, errMsg string) error {
-	dataJSON, _ := json.Marshal(map[string]string{
-		"station_id": sc.StationID,
-		"error":      errMsg,
-	})
-	dataStr := string(dataJSON)
-	n := &model.Notification{
-		UserID:  sc.UserID,
-		Type:    "recording_failed",
-		Title:   "録音失敗",
-		Message: fmt.Sprintf("「%s」の録音に失敗しました: %s", sc.ProgramTitle, errMsg),
-		Data:    &dataStr,
-	}
-	return insertNotification(db, n)
-}
-
 // insertNotification は notifications テーブルにレコードを INSERT する。
 func insertNotification(db *sqlx.DB, n *model.Notification) error {
 	_, err := db.Exec(
