@@ -59,6 +59,15 @@
     }
   ],
   "categories": ["entertainment", "music", "news"],
+  "share_target": {
+    "action": "/search",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "q",
+      "url": "url"
+    }
+  },
   "screenshots": [],
   "shortcuts": [
     {

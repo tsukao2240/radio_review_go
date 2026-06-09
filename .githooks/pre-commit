@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# CIと同一の検証をコミット時に強制するハーネス。
+# .github/workflows/ci.yml と項目・バージョンを一致させること。
+# 有効化: git config core.hooksPath .githooks
+set -euo pipefail
+
+echo "[pre-commit] gofmt -l ."
+fmt_out="$(gofmt -l . | grep -v '^docs/' || true)"
+if [ -n "$fmt_out" ]; then
+  echo "[pre-commit] gofmt 未整形:"
+  echo "$fmt_out"
+  echo "[pre-commit] 'gofmt -w .' を実行してから再コミットすること。"
+  exit 1
+fi
+
+echo "[pre-commit] go vet ./..."
+go vet ./...
+
+echo "[pre-commit] golangci-lint v1.64.8 run ./..."
+go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+
+echo "[pre-commit] go test ./... -count=1"
+go test ./... -count=1
+
+echo "[pre-commit] OK"

@@ -7,7 +7,7 @@ PHP/Laravel版（`../radio_review/`）をGoで書き直したもの。
 
 | 放送中の番組 | 2週間番組表（タイムフリー） |
 |---|---|
-| ![放送中の番組](screenshot_schedule.png) | ![2週間番組表](screenshot_twoweek.png) |
+| ![放送中の番組](docs/screenshot_schedule.png) | ![2週間番組表](docs/screenshot_twoweek.png) |
 
 ## 主な機能
 
@@ -92,6 +92,7 @@ go mod download
 mysql -u <user> -p <database> < migrations/001_initial.sql
 mysql -u <user> -p <database> < migrations/002_add_recurring_to_schedules.sql
 mysql -u <user> -p <database> < migrations/003_radio_programs_unique_key.sql
+mysql -u <user> -p <database> < migrations/004_push_subscriptions.sql
 
 # .env作成後にサーバー起動
 go run cmd/server/main.go
@@ -113,9 +114,12 @@ DB_PASSWORD=password
 
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
 
 RECORDING_STORAGE_PATH=storage/recordings
 RECORDING_MAX_PARALLEL=10
+RECORDING_RETENTION_DAYS=0
 
 MAIL_MAILER=log
 MAIL_HOST=127.0.0.1
@@ -124,6 +128,10 @@ MAIL_USERNAME=
 MAIL_PASSWORD=
 MAIL_FROM=no-reply@example.com
 MAIL_FROM_NAME=RadioProgram Review
+
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@example.com
 ```
 
 ## 開発コマンド
@@ -173,6 +181,23 @@ go test -run TestRadikoAuth ./pkg/radiko/
 
 テンプレートのパース・実行エラーは `TestTemplateSmoke_*` 系テストで検知する。
 
+## コミット前検証（pre-commit hook）
+
+CIと同一の検証をコミット時に強制する pre-commit hook を用意している。クローン後、各環境で一度だけ有効化すること（`core.hooksPath` はローカル設定のため共有されない）。
+
+```bash
+git config core.hooksPath .githooks
+```
+
+有効化後、`git commit` のたびに `.githooks/pre-commit` が以下を自動実行し、1件でも失敗するとコミットが拒否される。
+
+- `gofmt -l .`（未整形チェック）
+- `go vet ./...`
+- `golangci-lint v1.64.8`（`go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...`）
+- `go test ./... -count=1`
+
+CI（`.github/workflows/ci.yml`）も同一バージョンの golangci-lint を実行する。ローカル検証項目とCI検証項目を一致させ、「ローカルで検知できずCIでのみ落ちる」事故を防ぐ目的。
+
 ## アーキテクチャ補足
 
 ### Radiko認証
@@ -191,7 +216,12 @@ go test -run TestRadikoAuth ./pkg/radiko/
 ### HLS並列ダウンロード
 - `pkg/radiko/hls.go` で実装
 - `errgroup` + `semaphore` で最大N並列（`RECORDING_MAX_PARALLEL` で変更可）
+- `RECORDING_RETENTION_DAYS` が正の整数の場合、保持期間を超過した録音ファイルとRedisメタを削除
 
 ### 録音アクセス制御
 - 録音情報はRedisに `owner_key`（`session_{id}` or `user_{id}`）付きで保存
 - 一覧・履歴は自分の `owner_key` と一致するものだけ返す
+
+### 監視
+- `/healthz`: DB/Redis ping
+- `/metrics`: Prometheus形式のHTTP・録音ジョブメトリクス

@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/yourname/radio_review_go/internal/repository"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 )
 
 // パスワードリセットトークンの有効期限（60分）

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 type PostRepository struct {

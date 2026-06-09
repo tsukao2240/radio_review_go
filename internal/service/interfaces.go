@@ -1,6 +1,6 @@
 package service
 
-import "github.com/yourname/radio_review_go/internal/model"
+import "github.com/tsukao2240/radio_review_go/internal/model"
 
 // RadikoApiServiceInterface - Radiko APIとの連携
 type RadikoApiServiceInterface interface {
@@ -62,6 +62,14 @@ type NotificationServiceInterface interface {
 	GetAll(userID int64) ([]model.Notification, error)
 	MarkAsRead(notificationID, userID int64) error
 	MarkAllAsRead(userID int64) error
+}
+
+// PushServiceInterface - Web Push 購読管理
+type PushServiceInterface interface {
+	PublicKey() string
+	Enabled() bool
+	Subscribe(userID int64, endpoint, p256dh, auth string, userAgent *string) error
+	Unsubscribe(userID int64, endpoint string) error
 }
 
 // RecommendationServiceInterface - レコメンデーション機能

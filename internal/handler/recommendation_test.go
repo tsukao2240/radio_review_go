@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/sessions"
-	"github.com/yourname/radio_review_go/internal/service"
+	"github.com/tsukao2240/radio_review_go/internal/service"
 )
 
 // stubRecommendService は RecommendationServiceInterface のスタブ実装。

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/gorilla/sessions"
-	appmiddleware "github.com/yourname/radio_review_go/internal/middleware"
-	"github.com/yourname/radio_review_go/internal/model"
+	appmiddleware "github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 const baseTmpl = "web/templates/layouts/base.html"

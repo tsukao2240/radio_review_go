@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,10 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 func TestInsertColon(t *testing.T) {
@@ -254,5 +257,192 @@ func TestIsRecordingFilePathAllowed(t *testing.T) {
 	}
 	if isRecordingFilePathAllowed(dir, filepath.Join(dir, "..", "escape.aac")) {
 		t.Fatal("expected escaping path to be rejected")
+	}
+}
+
+func TestDeleteExpiredRecordings(t *testing.T) {
+	dir := t.TempDir()
+	oldFile := filepath.Join(dir, "old.aac")
+	newFile := filepath.Join(dir, "new.aac")
+	for _, path := range []string{oldFile, newFile} {
+		if err := os.WriteFile(path, []byte("x"), 0644); err != nil {
+			t.Fatalf("WriteFile %s: %v", path, err)
+		}
+	}
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	oldInfo := model.RecordingInfo{
+		RecordingID: "old",
+		FilePath:    oldFile,
+		CreatedAt:   time.Now().AddDate(0, 0, -8).Format(time.RFC3339),
+	}
+	newInfo := model.RecordingInfo{
+		RecordingID: "new",
+		FilePath:    newFile,
+		CreatedAt:   time.Now().AddDate(0, 0, -2).Format(time.RFC3339),
+	}
+	for key, info := range map[string]model.RecordingInfo{
+		"recording_old": oldInfo,
+		"recording_new": newInfo,
+	} {
+		b, _ := json.Marshal(info)
+		if err := rdb.Set(context.Background(), key, string(b), time.Hour).Err(); err != nil {
+			t.Fatalf("redis set %s: %v", key, err)
+		}
+	}
+
+	s := NewScheduler(nil, rdb, nil, nil, dir)
+	s.retentionDays = 7
+	s.DeleteExpiredRecordings(context.Background())
+
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Fatalf("old file should be removed, stat err=%v", err)
+	}
+	if _, err := rdb.Get(context.Background(), "recording_old").Result(); err != redis.Nil {
+		t.Fatalf("old redis key should be removed, err=%v", err)
+	}
+	if _, err := os.Stat(newFile); err != nil {
+		t.Fatalf("new file should remain: %v", err)
+	}
+	if _, err := rdb.Get(context.Background(), "recording_new").Result(); err != nil {
+		t.Fatalf("new redis key should remain: %v", err)
+	}
+}
+
+type stubSchedulerRadikoClient struct {
+	err error
+}
+
+func (c stubSchedulerRadikoClient) GetAuthToken(ctx context.Context, areaID string) (string, error) {
+	if c.err != nil {
+		return "", c.err
+	}
+	return "token", nil
+}
+
+type stubSchedulerHLSDownloader struct {
+	err error
+}
+
+func (d stubSchedulerHLSDownloader) DownloadTimefree(
+	ctx context.Context,
+	authToken string,
+	stationID string,
+	startTime string,
+	endTime string,
+	areaID string,
+	outputPath string,
+) error {
+	if d.err != nil {
+		return d.err
+	}
+	return os.WriteFile(outputPath, []byte("audio"), 0644)
+}
+
+type stubRecordingNotificationService struct {
+	completed int
+	failed    int
+}
+
+func (s *stubRecordingNotificationService) CreateRecordingCompleted(sc *model.RecordingSchedule, recordingID string) error {
+	s.completed++
+	return nil
+}
+
+func (s *stubRecordingNotificationService) CreateRecordingFailed(sc *model.RecordingSchedule, errMsg string) error {
+	s.failed++
+	return nil
+}
+
+func TestStartScheduledRecordingNotifiesCompleted(t *testing.T) {
+	db, mock := newSchedulerSQLMock(t)
+	defer db.Close()
+	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+		WithArgs("recording", nil, int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE recording_schedules SET recording_id = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+		WithArgs(sqlmock.AnyArg(), int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+		WithArgs("completed", nil, int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	notifier := &stubRecordingNotificationService{}
+	s := NewScheduler(db, rdb, stubSchedulerRadikoClient{}, stubSchedulerHLSDownloader{}, t.TempDir())
+	s.SetNotificationService(notifier)
+	s.startScheduledRecording(context.Background(), testRecordingSchedule())
+
+	if notifier.completed != 1 || notifier.failed != 0 {
+		t.Fatalf("notifications completed=%d failed=%d", notifier.completed, notifier.failed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestStartScheduledRecordingNotifiesFailed(t *testing.T) {
+	db, mock := newSchedulerSQLMock(t)
+	defer db.Close()
+	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+		WithArgs("recording", nil, int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+		WithArgs("failed", sqlmock.AnyArg(), int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	notifier := &stubRecordingNotificationService{}
+	s := NewScheduler(db, rdb, stubSchedulerRadikoClient{err: errors.New("auth failed")}, stubSchedulerHLSDownloader{}, t.TempDir())
+	s.SetNotificationService(notifier)
+	s.startScheduledRecording(context.Background(), testRecordingSchedule())
+
+	if notifier.completed != 0 || notifier.failed != 1 {
+		t.Fatalf("notifications completed=%d failed=%d", notifier.completed, notifier.failed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func newSchedulerSQLMock(t *testing.T) (*sqlx.DB, sqlmock.Sqlmock) {
+	t.Helper()
+	rawDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	return sqlx.NewDb(rawDB, "sqlmock"), mock
+}
+
+func testRecordingSchedule() *model.RecordingSchedule {
+	return &model.RecordingSchedule{
+		ID:                 1,
+		UserID:             2,
+		StationID:          "TBS",
+		ProgramTitle:       "morning show",
+		ScheduledStartTime: time.Now().Add(-time.Hour),
+		ScheduledEndTime:   time.Now(),
+		Status:             "pending",
 	}
 }

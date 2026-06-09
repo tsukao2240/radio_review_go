@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 // UserRepositoryInterface
@@ -98,8 +98,16 @@ type PostCommentRepositoryInterface interface {
 type NotificationRepositoryInterface interface {
 	FindUnreadByUser(userID int64) ([]model.Notification, error)
 	FindAllByUser(userID int64) ([]model.Notification, error)
+	Create(notification *model.Notification) (int64, error)
 	MarkAsRead(id, userID int64) error
 	MarkAllAsRead(userID int64) error
+}
+
+// PushSubscriptionRepositoryInterface
+type PushSubscriptionRepositoryInterface interface {
+	FindByUser(userID int64) ([]model.PushSubscription, error)
+	Upsert(subscription *model.PushSubscription) error
+	Delete(userID int64, endpoint string) error
 }
 
 // PasswordResetRepositoryInterface

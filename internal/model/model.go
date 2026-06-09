@@ -122,6 +122,19 @@ type Notification struct {
 	UpdatedAt time.Time  `db:"updated_at"`
 }
 
+// PushSubscription - push_subscriptions テーブル
+type PushSubscription struct {
+	ID           int64     `db:"id"`
+	UserID       int64     `db:"user_id"`
+	Endpoint     string    `db:"endpoint"`
+	EndpointHash string    `db:"endpoint_hash"`
+	P256dh       string    `db:"p256dh"`
+	Auth         string    `db:"auth"`
+	UserAgent    *string   `db:"user_agent"`
+	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
+}
+
 // ProgramSummary はレコメンド/トレンド集計用の軽量番組情報。
 // radio_programs と posts の JOIN 集計結果をマッピングする。
 type ProgramSummary struct {

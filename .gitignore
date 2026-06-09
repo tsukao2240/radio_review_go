@@ -6,5 +6,6 @@ storage/keys/
 /server
 coverage.out
 .vscode/
+.playwright-mcp/
 DESIGN_PLAN.md
 .dev_plan_*.md

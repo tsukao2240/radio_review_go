@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/yourname/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
 type NotificationRepository struct {
@@ -39,6 +39,26 @@ func (r *NotificationRepository) FindAllByUser(userID int64) ([]model.Notificati
 		return nil, fmt.Errorf("repository.NotificationRepository.FindAllByUser: %w", err)
 	}
 	return notifications, nil
+}
+
+func (r *NotificationRepository) Create(notification *model.Notification) (int64, error) {
+	res, err := r.db.Exec(
+		`INSERT INTO notifications (user_id, type, title, message, data, is_read, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, FALSE, NOW(), NOW())`,
+		notification.UserID,
+		notification.Type,
+		notification.Title,
+		notification.Message,
+		notification.Data,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("repository.NotificationRepository.Create: %w", err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("repository.NotificationRepository.Create LastInsertId: %w", err)
+	}
+	return id, nil
 }
 
 func (r *NotificationRepository) MarkAsRead(id, userID int64) error {

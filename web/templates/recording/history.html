@@ -53,9 +53,19 @@
                 data-filename="{{ .ProgramName }}">
           <i class="fas fa-trash mr-1"></i>削除
         </button>
+        <button class="offline-recording-btn text-sm px-3 py-1.5 border border-primary-300 dark:border-primary-700 rounded-lg text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition"
+                data-recording-id="{{ .RecordingID }}"
+                data-stream-url="/recording/stream?recording_id={{ .RecordingID }}"
+                data-title="{{ .ProgramName }}"
+                data-station="{{ .StationID }}">
+          <i class="fas fa-cloud-download-alt mr-1"></i>オフライン保存
+        </button>
       </div>
       <div class="audio-player-container mt-3 hidden" id="player-{{ .RecordingID }}">
-        <audio controls class="w-full" preload="none">
+        <audio controls class="w-full recording-audio" preload="none"
+               data-title="{{ .ProgramName }}"
+               data-station="{{ .StationID }}"
+               data-created-at="{{ .CreatedAt }}">
           <source src="/recording/stream?recording_id={{ .RecordingID }}" type="audio/aac">
           お使いのブラウザはHTML5 audioに対応していません。
         </audio>
@@ -198,6 +208,77 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    function setupMediaSession(audio) {
+        if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined' || !audio) return;
+        var title = audio.dataset.title || '録音';
+        var station = audio.dataset.station || '';
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: title,
+            artist: station,
+            album: 'RadioProgram Review',
+            artwork: [
+                { src: '/static/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
+                { src: '/static/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+                { src: '/static/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }
+            ]
+        });
+        navigator.mediaSession.setActionHandler('play', function() { audio.play(); });
+        navigator.mediaSession.setActionHandler('pause', function() { audio.pause(); });
+        navigator.mediaSession.setActionHandler('seekbackward', function(details) {
+            audio.currentTime = Math.max(audio.currentTime - (details.seekOffset || 10), 0);
+        });
+        navigator.mediaSession.setActionHandler('seekforward', function(details) {
+            audio.currentTime = Math.min(audio.currentTime + (details.seekOffset || 10), audio.duration || audio.currentTime);
+        });
+        navigator.mediaSession.setActionHandler('seekto', function(details) {
+            if (details.fastSeek && 'fastSeek' in audio) {
+                audio.fastSeek(details.seekTime);
+            } else {
+                audio.currentTime = details.seekTime;
+            }
+        });
+    }
+
+    document.querySelectorAll('.recording-audio').forEach(function(audio) {
+        audio.addEventListener('play', function() { setupMediaSession(audio); });
+    });
+
+    document.querySelectorAll('.offline-recording-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+                window.toast ? window.toast.error('Service Worker が有効ではありません') : alert('Service Worker が有効ではありません');
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            navigator.serviceWorker.controller.postMessage({
+                type: 'CACHE_RECORDING',
+                recordingId: btn.dataset.recordingId,
+                url: btn.dataset.streamUrl,
+                title: btn.dataset.title,
+                station: btn.dataset.station
+            });
+        });
+    });
+
+    if (navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener('message', function(event) {
+            if (!event.data || !event.data.type) return;
+            if (event.data.type === 'RECORDING_CACHED' || event.data.type === 'RECORDING_CACHE_FAILED') {
+                var btn = document.querySelector('.offline-recording-btn[data-recording-id="' + event.data.recordingId + '"]');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-cloud-download-alt mr-1"></i>オフライン保存';
+                }
+                if (event.data.type === 'RECORDING_CACHED') {
+                    window.toast ? window.toast.success('オフライン保存しました') : alert('オフライン保存しました');
+                } else {
+                    window.toast ? window.toast.error('オフライン保存に失敗しました') : alert('オフライン保存に失敗しました');
+                }
+            }
+        });
+    }
 });
 </script>
 {{ end }}

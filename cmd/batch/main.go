@@ -12,8 +12,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/yourname/radio_review_go/internal/job"
-	"github.com/yourname/radio_review_go/pkg/radiko"
+	"github.com/tsukao2240/radio_review_go/internal/job"
+	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
 func main() {

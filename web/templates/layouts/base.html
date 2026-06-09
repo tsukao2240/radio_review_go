@@ -44,6 +44,9 @@
 </head>
 
 <body>
+    <button id="pwa-install-button" class="fixed bottom-4 right-4 z-50 hidden bg-primary-500 hover:bg-primary-600 text-white rounded-lg px-4 py-2 shadow-lg text-sm font-semibold">
+        <i class="fas fa-download mr-2"></i>インストール
+    </button>
     <div id="app">
         <!-- ヘッダーナビゲーション -->
         <nav class="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-primary-500 to-primary-900 shadow-lg" role="navigation">
@@ -278,6 +281,79 @@
                 });
         });
     }
+    </script>
+
+    <!-- PWA インストール・Web Push -->
+    <script nonce="{{ .Nonce }}">
+    (function() {
+        var deferredPrompt = null;
+        var installButton = document.getElementById('pwa-install-button');
+
+        window.addEventListener('beforeinstallprompt', function(event) {
+            event.preventDefault();
+            deferredPrompt = event;
+            if (installButton) installButton.classList.remove('hidden');
+        });
+
+        if (installButton) {
+            installButton.addEventListener('click', function() {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.finally(function() {
+                    deferredPrompt = null;
+                    installButton.classList.add('hidden');
+                });
+            });
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+            var padding = '='.repeat((4 - base64String.length % 4) % 4);
+            var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            var rawData = window.atob(base64);
+            var outputArray = new Uint8Array(rawData.length);
+            for (var i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        {{ if .User }}
+        if ('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.ready
+                    .then(function(registration) {
+                        return fetch('/api/push/vapid-public-key')
+                            .then(function(response) { return response.json(); })
+                            .then(function(config) {
+                                if (!config.enabled || !config.public_key) return null;
+                                return Notification.requestPermission().then(function(permission) {
+                                    if (permission !== 'granted') return null;
+                                    return registration.pushManager.getSubscription()
+                                        .then(function(existing) {
+                                            if (existing) return existing;
+                                            return registration.pushManager.subscribe({
+                                                userVisibleOnly: true,
+                                                applicationServerKey: urlBase64ToUint8Array(config.public_key)
+                                            });
+                                        });
+                                });
+                            });
+                    })
+                    .then(function(subscription) {
+                        if (!subscription) return;
+                        return fetch('/api/push/subscribe', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(subscription)
+                        });
+                    })
+                    .catch(function(err) {
+                        console.warn('[Push] setup skipped:', err);
+                    });
+            });
+        }
+        {{ end }}
+    })();
     </script>
 
     <!-- モバイルメニュー制御 -->

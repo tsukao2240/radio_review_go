@@ -15,9 +15,11 @@ import (
 
 	"github.com/gorilla/sessions"
 	"github.com/redis/go-redis/v9"
-	"github.com/yourname/radio_review_go/internal/middleware"
-	"github.com/yourname/radio_review_go/internal/model"
-	"github.com/yourname/radio_review_go/pkg/radiko"
+	"github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/recordingfile"
+	"github.com/tsukao2240/radio_review_go/internal/recordingmeta"
+	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
 // RecordingHandler は録音関連のHTTPハンドラーを管理する。
@@ -129,9 +131,7 @@ func (h *RecordingHandler) StartTimefree(ctx context.Context, ownerKey, stationI
 	}
 
 	recordingID := fmt.Sprintf("%d", time.Now().UnixNano())
-	safeProgName := strings.ReplaceAll(programName, "/", "_")
-	fileName := fmt.Sprintf("%s_%s.aac", recordingID, safeProgName)
-	filePath := filepath.Join(h.storagePath, fileName)
+	filePath := recordingfile.NewPath(h.storagePath, recordingID, startTime, stationID, programName)
 
 	info := &model.RecordingInfo{
 		RecordingID: recordingID,
@@ -171,6 +171,9 @@ func (h *RecordingHandler) StartTimefree(ctx context.Context, ownerKey, stationI
 			updated.FailReason = dlErr.Error()
 			log.Printf("StartTimefree: download failed recording_id=%s station_id=%s start=%s end=%s: %v", recordingID, stationID, startTime, endTime, dlErr)
 		} else {
+			if err := recordingmeta.TagAAC(bgCtx, updated); err != nil {
+				log.Printf("StartTimefree: metadata tagging skipped recording_id=%s: %v", recordingID, err)
+			}
 			updated.Status = "completed"
 			updated.FailReason = ""
 		}
@@ -357,7 +360,7 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 		}
 		defer func() { _ = f.Close() }()
 
-		downloadName := info.ProgramName + ".aac"
+		downloadName := recordingfile.DisplayName(info.FilePath, info.StartTime, info.StationID, info.ProgramName)
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, downloadName))
 		http.ServeContent(w, r, downloadName, time.Time{}, f)
@@ -414,7 +417,8 @@ func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFun
 		}
 
 		w.Header().Set("Content-Type", "audio/aac")
-		http.ServeContent(w, r, info.ProgramName+".aac", stat.ModTime(), f)
+		streamName := recordingfile.DisplayName(info.FilePath, info.StartTime, info.StationID, info.ProgramName)
+		http.ServeContent(w, r, streamName, stat.ModTime(), f)
 	}
 }
 
