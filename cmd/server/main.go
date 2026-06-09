@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,10 +17,12 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/tsukao2240/radio_review_go/internal/handler"
 	"github.com/tsukao2240/radio_review_go/internal/job"
+	appmetrics "github.com/tsukao2240/radio_review_go/internal/metrics"
 	appmiddleware "github.com/tsukao2240/radio_review_go/internal/middleware"
 	"github.com/tsukao2240/radio_review_go/internal/model"
 	"github.com/tsukao2240/radio_review_go/internal/repository"
@@ -32,8 +34,10 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found, using environment variables")
+	envLoadErr := godotenv.Load()
+	configureLogger()
+	if envLoadErr != nil {
+		slog.Info("no .env file found, using environment variables")
 	}
 
 	// --- DB ---
@@ -48,7 +52,7 @@ func main() {
 	// --- Session store ---
 	appKey, err := resolveAppKey()
 	if err != nil {
-		log.Fatal(err)
+		fatal("resolve APP_KEY failed", err)
 	}
 	store := sessions.NewCookieStore([]byte(appKey))
 	store.Options = &sessions.Options{
@@ -140,12 +144,14 @@ func main() {
 
 	// --- Background jobs ---
 	scheduler := job.NewScheduler(db, rdb, radikoClient, hlsDownloader, storagePath)
+	scheduler.SetNotificationService(notifSvc)
 	go scheduler.Start(ctx)
 
 	// --- Router ---
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(appmetrics.HTTPMiddleware)
 	r.Use(appmiddleware.SecurityHeaders)
 	r.Use(appmiddleware.CSRFProtection(store))
 
@@ -169,6 +175,7 @@ func main() {
 		http.ServeFile(w, r, "web/static/icons/icon-192x192.png")
 	})
 	r.Get("/healthz", healthzHandler(db, rdb))
+	r.Handle("/metrics", promhttp.Handler())
 
 	// 認証（ログインは10回/分のレートリミット）
 	r.Get("/login", authHandler.ShowLogin)
@@ -288,29 +295,43 @@ func main() {
 		errCh <- srv.ListenAndServe()
 	}()
 
-	log.Printf("server starting on :%s", port)
+	slog.Info("server starting", "addr", ":"+port)
 	select {
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			fatal("server failed", err)
 		}
 	case <-ctx.Done():
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Printf("server shutdown error: %v", err)
+			slog.Error("server shutdown error", "error", err)
 		}
 		if err := <-errCh; err != nil && err != http.ErrServerClosed {
-			log.Printf("server error: %v", err)
+			slog.Error("server error", "error", err)
 		}
 	}
 
 	if err := rdb.Close(); err != nil {
-		log.Printf("redis close error: %v", err)
+		slog.Error("redis close error", "error", err)
 	}
 	if err := db.Close(); err != nil {
-		log.Printf("db close error: %v", err)
+		slog.Error("db close error", "error", err)
 	}
+}
+
+func configureLogger() {
+	level := slog.LevelDebug
+	if os.Getenv("APP_ENV") == "production" {
+		level = slog.LevelInfo
+	}
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(handler))
+}
+
+func fatal(message string, err error) {
+	slog.Error(message, "error", err)
+	os.Exit(1)
 }
 
 func resolveAppKey() (string, error) {
@@ -321,7 +342,7 @@ func resolveAppKey() (string, error) {
 	if os.Getenv("APP_ENV") == "production" {
 		return "", fmt.Errorf("APP_KEY is required when APP_ENV=production")
 	}
-	log.Println("warning: APP_KEY is not set; using insecure default key for non-production")
+	slog.Warn("APP_KEY is not set; using insecure default key for non-production")
 	return "change-me-in-production-32bytes!!", nil
 }
 
@@ -363,12 +384,12 @@ func mustConnectDB() *sqlx.DB {
 	)
 	db, err := sqlx.Open("mysql", dsn)
 	if err != nil {
-		log.Fatalf("failed to open DB: %v", err)
+		fatal("failed to open DB", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		log.Fatalf("failed to ping DB: %v", err)
+		fatal("failed to ping DB", err)
 	}
 	return db
 }
@@ -378,7 +399,7 @@ func mustConnectRedis() *redis.Client {
 	if v := os.Getenv("REDIS_DB"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			log.Fatalf("invalid REDIS_DB: %v", err)
+			fatal("invalid REDIS_DB", err)
 		}
 		db = n
 	}

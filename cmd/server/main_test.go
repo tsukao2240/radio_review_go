@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -30,9 +30,9 @@ func TestResolveAppKey(t *testing.T) {
 		t.Setenv("APP_ENV", "local")
 		t.Setenv("APP_KEY", "")
 		var buf bytes.Buffer
-		orig := log.Writer()
-		log.SetOutput(&buf)
-		t.Cleanup(func() { log.SetOutput(orig) })
+		orig := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		t.Cleanup(func() { slog.SetDefault(orig) })
 
 		got, err := resolveAppKey()
 		if err != nil {
