@@ -1,21 +1,33 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/tsukao2240/radio_review_go/internal/model"
 	"github.com/tsukao2240/radio_review_go/internal/repository"
 )
 
+type PushSender interface {
+	SendToUser(ctx context.Context, userID int64, payload PushPayload) error
+}
+
 // NotificationService は NotificationServiceInterface を実装する。
 type NotificationService struct {
-	repo repository.NotificationRepositoryInterface
+	repo       repository.NotificationRepositoryInterface
+	pushSender PushSender
 }
 
 // NewNotificationService は新しい NotificationService を返す。
 func NewNotificationService(repo repository.NotificationRepositoryInterface) *NotificationService {
 	return &NotificationService{repo: repo}
+}
+
+func (s *NotificationService) SetPushSender(pushSender PushSender) {
+	s.pushSender = pushSender
 }
 
 // GetUnread は未読通知の一覧を返す。
@@ -41,14 +53,23 @@ func (s *NotificationService) CreateRecordingCompleted(sc *model.RecordingSchedu
 		return fmt.Errorf("notification recording completed data: %w", err)
 	}
 	dataStr := string(dataJSON)
-	_, err = s.repo.Create(&model.Notification{
+	notification := &model.Notification{
 		UserID:  sc.UserID,
 		Type:    "recording_complete",
 		Title:   "録音完了",
 		Message: fmt.Sprintf("「%s」の録音が完了しました", sc.ProgramTitle),
 		Data:    &dataStr,
+	}
+	id, err := s.repo.Create(notification)
+	if err != nil {
+		return err
+	}
+	notification.ID = id
+	s.sendPush(notification, map[string]interface{}{
+		"station_id":   sc.StationID,
+		"recording_id": recordingID,
 	})
-	return err
+	return nil
 }
 
 func (s *NotificationService) CreateRecordingFailed(sc *model.RecordingSchedule, errMsg string) error {
@@ -60,14 +81,41 @@ func (s *NotificationService) CreateRecordingFailed(sc *model.RecordingSchedule,
 		return fmt.Errorf("notification recording failed data: %w", err)
 	}
 	dataStr := string(dataJSON)
-	_, err = s.repo.Create(&model.Notification{
+	notification := &model.Notification{
 		UserID:  sc.UserID,
 		Type:    "recording_failed",
 		Title:   "録音失敗",
 		Message: fmt.Sprintf("「%s」の録音に失敗しました: %s", sc.ProgramTitle, errMsg),
 		Data:    &dataStr,
+	}
+	id, err := s.repo.Create(notification)
+	if err != nil {
+		return err
+	}
+	notification.ID = id
+	s.sendPush(notification, map[string]interface{}{
+		"station_id": sc.StationID,
+		"error":      errMsg,
 	})
-	return err
+	return nil
+}
+
+func (s *NotificationService) sendPush(notification *model.Notification, data map[string]interface{}) {
+	if s.pushSender == nil || notification == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.pushSender.SendToUser(ctx, notification.UserID, PushPayload{
+		Title: notification.Title,
+		Body:  notification.Message,
+		ID:    notification.ID,
+		Type:  notification.Type,
+		URL:   "/notifications",
+		Data:  data,
+	}); err != nil {
+		slog.Warn("push notification failed", "user_id", notification.UserID, "notification_id", notification.ID, "error", err)
+	}
 }
 
 // MarkAsRead は指定した通知を既読にする。

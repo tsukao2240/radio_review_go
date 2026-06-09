@@ -103,6 +103,13 @@ type NotificationRepositoryInterface interface {
 	MarkAllAsRead(userID int64) error
 }
 
+// PushSubscriptionRepositoryInterface
+type PushSubscriptionRepositoryInterface interface {
+	FindByUser(userID int64) ([]model.PushSubscription, error)
+	Upsert(subscription *model.PushSubscription) error
+	Delete(userID int64, endpoint string) error
+}
+
 // PasswordResetRepositoryInterface
 type PasswordResetRepositoryInterface interface {
 	// Save はトークンを保存する（既存レコードは上書き）。

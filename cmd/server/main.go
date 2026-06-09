@@ -76,6 +76,7 @@ func main() {
 	commentRepo := repository.NewPostCommentRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	passwordResetRepo := repository.NewPasswordResetRepository(db)
+	pushRepo := repository.NewPushSubscriptionRepository(db)
 
 	// --- Services ---
 	radikoSvc := service.NewRadikoApiService(rdb, programRepo)
@@ -84,6 +85,8 @@ func main() {
 	interactionSvc := service.NewPostInteractionService(likeRepo, commentRepo)
 	favSvc := service.NewFavoriteService(favRepo)
 	notifSvc := service.NewNotificationService(notifRepo)
+	pushSvc := service.NewPushServiceFromEnv(pushRepo)
+	notifSvc.SetPushSender(pushSvc)
 	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
 	recommendSvc := service.NewRecommendationService(postRepo, programRepo, favRepo, rdb)
 	passwordResetSvc := service.NewPasswordResetServiceWithMailer(passwordResetRepo, userRepo, service.NewMailerFromEnv())
@@ -114,6 +117,7 @@ func main() {
 	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
 	favHandler.SetRecorder(recordingHandler)
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
+	pushHandler := handler.NewPushHandler(pushSvc)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
 	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
 	passwordResetHandler := handler.NewPasswordResetHandler(passwordResetSvc)
@@ -263,6 +267,9 @@ func main() {
 		r.Get("/api/notifications/all", notifHandler.GetAll)
 		r.Post("/api/notifications/mark-read", notifHandler.MarkAsRead)
 		r.Post("/api/notifications/mark-all-read", notifHandler.MarkAllAsRead)
+		r.Get("/api/push/vapid-public-key", pushHandler.VAPIDPublicKey)
+		r.Post("/api/push/subscribe", pushHandler.Subscribe)
+		r.Delete("/api/push/subscribe", pushHandler.Unsubscribe)
 	})
 
 	// レコメンデーション（認証必須）

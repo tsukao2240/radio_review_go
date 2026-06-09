@@ -64,6 +64,14 @@ type NotificationServiceInterface interface {
 	MarkAllAsRead(userID int64) error
 }
 
+// PushServiceInterface - Web Push 購読管理
+type PushServiceInterface interface {
+	PublicKey() string
+	Enabled() bool
+	Subscribe(userID int64, endpoint, p256dh, auth string, userAgent *string) error
+	Unsubscribe(userID int64, endpoint string) error
+}
+
 // RecommendationServiceInterface - レコメンデーション機能
 type RecommendationServiceInterface interface {
 	// GetRecommendations はユーザーへのパーソナライズされたレコメンデーションを返す（Redisキャッシュ30分）。

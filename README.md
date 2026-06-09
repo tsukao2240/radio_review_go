@@ -92,6 +92,7 @@ go mod download
 mysql -u <user> -p <database> < migrations/001_initial.sql
 mysql -u <user> -p <database> < migrations/002_add_recurring_to_schedules.sql
 mysql -u <user> -p <database> < migrations/003_radio_programs_unique_key.sql
+mysql -u <user> -p <database> < migrations/004_push_subscriptions.sql
 
 # .env作成後にサーバー起動
 go run cmd/server/main.go
@@ -127,6 +128,10 @@ MAIL_USERNAME=
 MAIL_PASSWORD=
 MAIL_FROM=no-reply@example.com
 MAIL_FROM_NAME=RadioProgram Review
+
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@example.com
 ```
 
 ## 開発コマンド
