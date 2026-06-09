@@ -181,6 +181,23 @@ go test -run TestRadikoAuth ./pkg/radiko/
 
 テンプレートのパース・実行エラーは `TestTemplateSmoke_*` 系テストで検知する。
 
+## コミット前検証（pre-commit hook）
+
+CIと同一の検証をコミット時に強制する pre-commit hook を用意している。クローン後、各環境で一度だけ有効化すること（`core.hooksPath` はローカル設定のため共有されない）。
+
+```bash
+git config core.hooksPath .githooks
+```
+
+有効化後、`git commit` のたびに `.githooks/pre-commit` が以下を自動実行し、1件でも失敗するとコミットが拒否される。
+
+- `gofmt -l .`（未整形チェック）
+- `go vet ./...`
+- `golangci-lint v1.64.8`（`go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...`）
+- `go test ./... -count=1`
+
+CI（`.github/workflows/ci.yml`）も同一バージョンの golangci-lint を実行する。ローカル検証項目とCI検証項目を一致させ、「ローカルで検知できずCIでのみ落ちる」事故を防ぐ目的。
+
 ## アーキテクチャ補足
 
 ### Radiko認証
