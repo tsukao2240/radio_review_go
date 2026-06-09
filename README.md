@@ -70,6 +70,9 @@ radio_review_go/
 # .envを作成
 cp .env.example .env  # なければ下記「環境変数」を参考に手動作成
 
+# Radiko認証キーを配置（タイムフリー録音に必須・下記「Radiko認証キー」参照）
+# storage/keys/radiko_auth_key.txt
+
 # 起動（MySQL・Redis・アプリを一括起動）
 docker compose up -d
 
@@ -176,6 +179,14 @@ go test -run TestRadikoAuth ./pkg/radiko/
 - `pkg/radiko/client.go` で実装
 - 認証トークンはRedisに55分キャッシュ（`radiko_auth_token_{areaId}`）
 - SSL検証は `InsecureSkipVerify: true`（Radiko API互換性のため意図的）
+
+### Radiko認証キー（タイムフリー録音に必須）
+- パス: `storage/keys/radiko_auth_key.txt`
+- 内容: Radikoスマートフォンアプリの認証フルキー（バイナリ）を **Base64エンコードした文字列**
+- `.gitignore` 対象のためリポジトリには含まれない。各環境で手動配置が必要
+- 認証フロー: `auth1` で取得した `keyOffset`/`keyLength` でこのキーから部分キーを抽出し `auth2` に送信
+- 鍵が未配置・不正な場合、タイムフリー録音は認証エラー（auth2が401等）で失敗する
+- Docker利用時は `storage/keys/` がコンテナにコピー（またはマウント）されること
 
 ### HLS並列ダウンロード
 - `pkg/radiko/hls.go` で実装
