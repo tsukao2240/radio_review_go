@@ -355,6 +355,90 @@ func TestFavoriteHandler_Index(t *testing.T) {
 			t.Errorf("recording fields = %#v", got)
 		}
 	})
+	t.Run("タイムフリーあり: broadcast_dayの曜日を録音対象にする", func(t *testing.T) {
+		now := time.Now()
+		matchingEnd := now.AddDate(0, 0, -2)
+		matchingStart := matchingEnd.Add(-1 * time.Hour)
+		otherEnd := now.AddDate(0, 0, -1)
+		otherStart := otherEnd.Add(-1 * time.Hour)
+		broadcastDay := (int(matchingStart.Weekday()) + 6) % 7
+
+		svc := &stubFavService{
+			getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {
+				return []model.FavoriteProgram{{
+					ID:           1,
+					UserID:       userID,
+					StationID:    "TBS",
+					ProgramTitle: "daily",
+					BroadcastDay: &broadcastDay,
+					CreatedAt:    now,
+				}}, nil
+			},
+		}
+
+		radiko := &stubRadikoService{
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"title": "daily",
+								"cast":  "Matching DJ",
+								"date":  matchingStart.Format("20060102"),
+								"start": matchingStart.Format("15:04"),
+								"end":   matchingEnd.Format("15:04"),
+								"ft":    matchingStart.Format("20060102150405"),
+								"to":    matchingEnd.Format("20060102150405"),
+							},
+							{
+								"title": "daily",
+								"cast":  "Other DJ",
+								"date":  otherStart.Format("20060102"),
+								"start": otherStart.Format("15:04"),
+								"end":   otherEnd.Format("15:04"),
+								"ft":    otherStart.Format("20060102150405"),
+								"to":    otherEnd.Format("20060102150405"),
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		h := NewFavoriteHandler(svc, radiko, nil)
+		req := withUserID(httptest.NewRequest(http.MethodGet, "/favorites", nil), 1)
+		rr := httptest.NewRecorder()
+		h.Index(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("got %d, want 200", rr.Code)
+		}
+
+		var resp struct {
+			Favorites []struct {
+				Cast       string
+				Recordable bool
+				RecDate    string
+				RecStart   string
+				RecEnd     string
+			}
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if len(resp.Favorites) != 1 {
+			t.Fatalf("favorites len = %d, want 1", len(resp.Favorites))
+		}
+		got := resp.Favorites[0]
+		if !got.Recordable {
+			t.Error("expected Recordable=true")
+		}
+		if got.Cast != "Matching DJ" {
+			t.Errorf("Cast = %q, want Matching DJ", got.Cast)
+		}
+		if got.RecDate != matchingStart.Format("20060102") || got.RecStart != matchingStart.Format("15:04") || got.RecEnd != matchingEnd.Format("15:04") {
+			t.Errorf("recording fields = %#v", got)
+		}
+	})
 	t.Run("タイムフリーなし: 録音不可", func(t *testing.T) {
 		svc := &stubFavService{
 			getByUserFunc: func(userID int64) ([]model.FavoriteProgram, error) {

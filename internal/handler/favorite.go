@@ -67,7 +67,7 @@ func (h *FavoriteHandler) Index(w http.ResponseWriter, r *http.Request) {
 		if h.radikoService != nil {
 			entries, err := twoWeekEntries(h.radikoService, f.StationID)
 			if err == nil {
-				latest := findLatestTimefreeFromEntries(entries, f.ProgramTitle)
+				latest := findLatestTimefreeFromEntries(entries, f.ProgramTitle, f.BroadcastDay)
 
 				// 次回放送のキャスト・日付を優先、なければ直近タイムフリー放送を使用
 				if next := findNextBroadcastFromEntries(entries, f.ProgramTitle, f.BroadcastDay); next != nil {

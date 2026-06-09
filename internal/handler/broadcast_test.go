@@ -405,6 +405,50 @@ func TestBroadcastHandler_GetTwoWeekScheduleSelect_DefaultArea(t *testing.T) {
 	}
 }
 
+func TestFindLatestTimefreeFromEntries_BroadcastDay(t *testing.T) {
+	now := time.Now()
+	matchingEnd := now.AddDate(0, 0, -2)
+	matchingStart := matchingEnd.Add(-1 * time.Hour)
+	otherEnd := now.AddDate(0, 0, -1)
+	otherStart := otherEnd.Add(-1 * time.Hour)
+	broadcastDay := (int(matchingStart.Weekday()) + 6) % 7
+
+	entries := []map[string]interface{}{
+		{
+			"title": "daily",
+			"date":  matchingStart.Format("20060102"),
+			"ft":    matchingStart.Format("20060102150405"),
+			"to":    matchingEnd.Format("20060102150405"),
+		},
+		{
+			"title": "daily",
+			"date":  otherStart.Format("20060102"),
+			"ft":    otherStart.Format("20060102150405"),
+			"to":    otherEnd.Format("20060102150405"),
+		},
+	}
+
+	t.Run("broadcastDay specified returns latest matching weekday", func(t *testing.T) {
+		got := findLatestTimefreeFromEntries(entries, "daily", &broadcastDay)
+		if got == nil {
+			t.Fatal("got nil, want matching entry")
+		}
+		if got["date"] != matchingStart.Format("20060102") {
+			t.Errorf("date = %v, want %s", got["date"], matchingStart.Format("20060102"))
+		}
+	})
+
+	t.Run("nil broadcastDay returns latest across all weekdays", func(t *testing.T) {
+		got := findLatestTimefreeFromEntries(entries, "daily", nil)
+		if got == nil {
+			t.Fatal("got nil, want latest entry")
+		}
+		if got["date"] != otherStart.Format("20060102") {
+			t.Errorf("date = %v, want %s", got["date"], otherStart.Format("20060102"))
+		}
+	})
+}
+
 func TestFetchXMLHandler_HTTPError(t *testing.T) {
 	// 無効な URL → http.Get エラー
 	err := fetchXMLHandler("http://127.0.0.1:0/invalid", nil)

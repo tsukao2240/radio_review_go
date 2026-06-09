@@ -234,11 +234,11 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 		if entry := entryForDate(h.radikoService, stationID, title, dateParam); entry != nil {
 			overwriteDetailFromEntry(detail, entry)
 			cast, _ := entry["cast"].(string)
-			latestBroadcast = findLatestTimefreeWithCast(h.radikoService, stationID, title, cast)
+			latestBroadcast = findLatestTimefreeWithCast(h.radikoService, stationID, title, cast, nil)
 		}
 	}
 	if latestBroadcast == nil {
-		latestBroadcast = findLatestTimefree(h.radikoService, stationID, title)
+		latestBroadcast = findLatestTimefree(h.radikoService, stationID, title, nil)
 		if latestBroadcast != nil {
 			overwriteDetailFromEntry(detail, latestBroadcast)
 		}
@@ -257,13 +257,14 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 
 // findLatestTimefree は2週間番組表からタイムフリー再生可能な直近放送を返す。
 // 放送終了済み（過去）かつ7日以内のものを対象とし、最新のものを返す。
-func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title string) map[string]interface{} {
+// broadcastDay が nil でない場合は指定曜日（0=月〜6=日）のみを対象にする。
+func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title string, broadcastDay *int) map[string]interface{} {
 	entries, err := twoWeekEntries(svc, stationID)
 	if err != nil {
 		log.Printf("findLatestTimefree: GetTwoWeekSchedule error: %v", err)
 		return nil
 	}
-	return findLatestTimefreeFromEntries(entries, title)
+	return findLatestTimefreeFromEntries(entries, title, broadcastDay)
 }
 
 func twoWeekEntries(svc service.RadikoApiServiceInterface, stationID string) ([]map[string]interface{}, error) {
@@ -285,7 +286,7 @@ func twoWeekEntries(svc service.RadikoApiServiceInterface, stationID string) ([]
 	return entries, nil
 }
 
-func findLatestTimefreeFromEntries(entries []map[string]interface{}, title string) map[string]interface{} {
+func findLatestTimefreeFromEntries(entries []map[string]interface{}, title string, broadcastDay *int) map[string]interface{} {
 	now := time.Now()
 	timefreeLimitDate := now.AddDate(0, 0, -7)
 
@@ -309,6 +310,12 @@ func findLatestTimefreeFromEntries(entries []map[string]interface{}, title strin
 		if !programEndTime.Before(now) || !programEndTime.After(timefreeLimitDate) {
 			continue
 		}
+		if broadcastDay != nil {
+			wd, ok := entryWeekday(entry)
+			if !ok || wd != *broadcastDay {
+				continue
+			}
+		}
 		if latestBroadcast == nil || programEndTime.After(latestEndTime) {
 			latestBroadcast = entry
 			latestEndTime = programEndTime
@@ -316,6 +323,18 @@ func findLatestTimefreeFromEntries(entries []map[string]interface{}, title strin
 	}
 
 	return latestBroadcast
+}
+
+func entryWeekday(entry map[string]interface{}) (int, bool) {
+	ftStr, _ := entry["ft"].(string)
+	if len(ftStr) < 12 {
+		return 0, false
+	}
+	t, err := time.ParseInLocation("20060102150405", ftStr, time.Local)
+	if err != nil {
+		return 0, false
+	}
+	return (int(t.Weekday()) + 6) % 7, true
 }
 
 // entryForDate は指定日付・タイトルに一致する2週間番組表のエントリを返す。
@@ -347,7 +366,7 @@ func entryForDate(svc service.RadikoApiServiceInterface, stationID, title, date 
 
 // findLatestTimefreeWithCast は指定キャストと一致する直近タイムフリー対象放送を返す。
 // 一致するものがなければキャスト不問で findLatestTimefree と同等の結果を返す。
-func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID, title, cast string) map[string]interface{} {
+func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID, title, cast string, broadcastDay *int) map[string]interface{} {
 	entries, err := twoWeekEntries(svc, stationID)
 	if err != nil {
 		return nil
@@ -372,6 +391,12 @@ func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID
 		t, err := time.ParseInLocation("20060102150405", toStr, time.Local)
 		if err != nil || !t.Before(now) || !t.After(limit) {
 			continue
+		}
+		if broadcastDay != nil {
+			wd, ok := entryWeekday(e)
+			if !ok || wd != *broadcastDay {
+				continue
+			}
 		}
 		if best == nil || t.After(bestTime) {
 			best = e
