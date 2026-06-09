@@ -39,6 +39,11 @@
             <i class="fas fa-microphone mr-1"></i>{{ .Cast }}
           </p>
           {{ end }}
+          {{ if .RecDate }}
+          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <i class="far fa-calendar-alt mr-1"></i>直近放送日: {{ fmtdate .RecDate }}
+          </p>
+          {{ end }}
           <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
             <i class="far fa-clock mr-1"></i>登録日時: {{ .CreatedAt.Format "2006年01月02日 15:04" }}
           </p>

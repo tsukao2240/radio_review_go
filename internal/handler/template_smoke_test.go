@@ -199,6 +199,12 @@ func TestTemplateSmoke_FavoriteIndexTimefreeRecordingButton(t *testing.T) {
 	if !strings.Contains(html, `fetch('/recording/timefree/start'`) {
 		t.Error("expected timefree recording fetch")
 	}
+	if !strings.Contains(html, "直近放送日: 2026/06/01 (月)") {
+		t.Error("expected latest broadcast date text")
+	}
+	if strings.Count(html, "直近放送日:") != 1 {
+		t.Errorf("latest broadcast date count = %d, want 1", strings.Count(html, "直近放送日:"))
+	}
 	if strings.Contains(html, `data-program-name="録音不可番組"`) {
 		t.Error("unexpected recording button for non-recordable favorite")
 	}
