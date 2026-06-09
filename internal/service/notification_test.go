@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/tsukao2240/radio_review_go/internal/model"
@@ -10,6 +11,7 @@ import (
 type stubNotifRepo struct {
 	findUnreadFunc  func(userID int64) ([]model.Notification, error)
 	findAllFunc     func(userID int64) ([]model.Notification, error)
+	createFunc      func(notification *model.Notification) (int64, error)
 	markAsReadFunc  func(id, userID int64) error
 	markAllReadFunc func(userID int64) error
 }
@@ -25,6 +27,12 @@ func (r *stubNotifRepo) FindAllByUser(userID int64) ([]model.Notification, error
 		return r.findAllFunc(userID)
 	}
 	return nil, nil
+}
+func (r *stubNotifRepo) Create(notification *model.Notification) (int64, error) {
+	if r.createFunc != nil {
+		return r.createFunc(notification)
+	}
+	return 1, nil
 }
 func (r *stubNotifRepo) MarkAsRead(id, userID int64) error {
 	if r.markAsReadFunc != nil {
@@ -135,6 +143,54 @@ func TestNotificationService_GetAll(t *testing.T) {
 		_, err := svc.GetAll(5)
 		if !errors.Is(err, repoErr) {
 			t.Errorf("expected repoErr, got %v", err)
+		}
+	})
+}
+
+func TestNotificationService_CreateRecordingNotifications(t *testing.T) {
+	sc := &model.RecordingSchedule{
+		UserID:       9,
+		StationID:    "TBS",
+		ProgramTitle: "morning show",
+	}
+
+	t.Run("completed", func(t *testing.T) {
+		var got *model.Notification
+		repo := &stubNotifRepo{
+			createFunc: func(notification *model.Notification) (int64, error) {
+				got = notification
+				return 1, nil
+			},
+		}
+		svc := NewNotificationService(repo)
+		if err := svc.CreateRecordingCompleted(sc, "rec-1"); err != nil {
+			t.Fatalf("CreateRecordingCompleted: %v", err)
+		}
+		if got == nil || got.UserID != 9 || got.Type != "recording_complete" {
+			t.Fatalf("unexpected notification: %#v", got)
+		}
+		if got.Data == nil || !strings.Contains(*got.Data, "rec-1") {
+			t.Fatalf("expected recording id in data, got %#v", got.Data)
+		}
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		var got *model.Notification
+		repo := &stubNotifRepo{
+			createFunc: func(notification *model.Notification) (int64, error) {
+				got = notification
+				return 1, nil
+			},
+		}
+		svc := NewNotificationService(repo)
+		if err := svc.CreateRecordingFailed(sc, "download failed"); err != nil {
+			t.Fatalf("CreateRecordingFailed: %v", err)
+		}
+		if got == nil || got.UserID != 9 || got.Type != "recording_failed" {
+			t.Fatalf("unexpected notification: %#v", got)
+		}
+		if got.Data == nil || !strings.Contains(*got.Data, "download failed") {
+			t.Fatalf("expected error in data, got %#v", got.Data)
 		}
 	})
 }

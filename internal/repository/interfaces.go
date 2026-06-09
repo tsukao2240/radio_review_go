@@ -98,6 +98,7 @@ type PostCommentRepositoryInterface interface {
 type NotificationRepositoryInterface interface {
 	FindUnreadByUser(userID int64) ([]model.Notification, error)
 	FindAllByUser(userID int64) ([]model.Notification, error)
+	Create(notification *model.Notification) (int64, error)
 	MarkAsRead(id, userID int64) error
 	MarkAllAsRead(userID int64) error
 }
