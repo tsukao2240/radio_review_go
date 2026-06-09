@@ -105,6 +105,7 @@ func main() {
 	mypageHandler := handler.NewMypageHandler(postSvc, store)
 	favHandler := handler.NewFavoriteHandler(favSvc, radikoSvc, store)
 	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
+	favHandler.SetRecorder(recordingHandler)
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
 	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
@@ -220,6 +221,7 @@ func main() {
 		r.Get("/favorites", favHandler.Index)
 		r.With(appmiddleware.RateLimit(30, time.Minute)).Post("/favorites", favHandler.Store)
 		r.With(appmiddleware.RateLimit(30, time.Minute)).Post("/favorites/delete", favHandler.Destroy)
+		r.With(appmiddleware.RateLimit(2, time.Minute)).Post("/favorites/record-all", favHandler.RecordAll)
 		r.Get("/favorites/check", favHandler.Check)
 	})
 

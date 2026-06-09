@@ -143,6 +143,7 @@ type RecordingInfo struct {
 	EndTime     string `json:"end_time"`
 	Status      string `json:"status"` // recording/completed/failed/stopped
 	FilePath    string `json:"file_path"`
+	FailReason  string `json:"fail_reason,omitempty"`
 	// OwnerKey: ログイン済みは "user_{id}"、ゲストは "session_{id}"
 	OwnerKey  string `json:"owner_key"`
 	CreatedAt string `json:"created_at"`

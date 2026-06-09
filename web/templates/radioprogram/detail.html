@@ -75,7 +75,9 @@
             data-cast="{{ index . "cast" }}"
             data-date="{{ index $latestBroadcast "date" }}"
             data-start="{{ index $latestBroadcast "start" }}"
-            data-end="{{ index $latestBroadcast "end" }}">
+            data-end="{{ index $latestBroadcast "end" }}"
+            data-ft="{{ index $latestBroadcast "ft" }}"
+            data-to="{{ index $latestBroadcast "to" }}">
       <i class="fas fa-microphone mr-1"></i> この放送を録音する
     </button>
   </div>
@@ -188,6 +190,8 @@
       var date  = this.dataset.date;
       var start = this.dataset.start.replace(':', '');
       var end   = this.dataset.end.replace(':', '');
+      var startTime = this.dataset.ft || (date + start);
+      var endTime   = this.dataset.to || (date + end);
 
       if (!confirm('「' + title + '」を録音しますか？')) return;
 
@@ -202,8 +206,8 @@
           station_name: sid,
           program_name: title,
           cast: cast,
-          start_time: date + start,
-          end_time:   date + end
+          start_time: startTime,
+          end_time:   endTime
         })
       })
       .then(function(r) { return r.json(); })

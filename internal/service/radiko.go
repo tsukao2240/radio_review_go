@@ -79,7 +79,7 @@ func fetchXML(url string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("http.Get %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -165,7 +165,9 @@ func (s *RadikoApiService) GetWeeklySchedule(stationID string) ([]map[string]int
 			// 24時以降の今日の番組を除外
 			if programDate == today && len(startTime) >= 2 {
 				var h int
-				fmt.Sscanf(startTime[:2], "%d", &h)
+				if _, err := fmt.Sscanf(startTime[:2], "%d", &h); err != nil {
+					continue
+				}
 				if h >= 24 {
 					continue
 				}

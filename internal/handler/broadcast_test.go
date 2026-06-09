@@ -341,6 +341,59 @@ func TestBroadcastHandler_ShowProgramDetail(t *testing.T) {
 			t.Errorf("got %d, want 500", rr.Code)
 		}
 	})
+	t.Run("24時以降開始の録音ボタンにft/toを埋め込む", func(t *testing.T) {
+		now := time.Now()
+		start := now.AddDate(0, 0, -2)
+		start = time.Date(start.Year(), start.Month(), start.Day(), 1, 0, 0, 0, time.Local)
+		end := start.Add(2 * time.Hour)
+		ft := start.Format("20060102150405")
+		to := end.Format("20060102150405")
+		svc := &stubRadikoService{
+			getProgramDetailsFunc: func(stationID, title string) (map[string]interface{}, error) {
+				return map[string]interface{}{"id": stationID, "title": title, "station_id": stationID, "cast": "cast"}, nil
+			},
+			getTwoWeekScheduleFunc: func(stationID string) ([]map[string]interface{}, error) {
+				return []map[string]interface{}{
+					{
+						"entries": []map[string]interface{}{
+							{
+								"id":    stationID,
+								"title": "late-night",
+								"cast":  "cast",
+								"date":  start.Format("20060102"),
+								"start": "25:00",
+								"end":   "27:00",
+								"ft":    ft,
+								"to":    to,
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		h := NewBroadcastHandler(svc, &stubSearchService{}, &stubBroadcastProgramRepo{})
+		r := chi.NewRouter()
+		r.Get("/list/{station_id}/{title}", h.ShowProgramDetail)
+		req := httptest.NewRequest(http.MethodGet, "/list/LFR/late-night", nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("got %d, want 200", rr.Code)
+		}
+		var resp struct {
+			LatestBroadcast map[string]interface{}
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+		if resp.LatestBroadcast["start"] != "25:00" || resp.LatestBroadcast["end"] != "27:00" {
+			t.Fatalf("late-night display times = %#v", resp.LatestBroadcast)
+		}
+		if resp.LatestBroadcast["ft"] != ft || resp.LatestBroadcast["to"] != to {
+			t.Fatalf("ft/to = %#v, want %q/%q", resp.LatestBroadcast, ft, to)
+		}
+	})
 }
 
 func TestBroadcastHandler_GetTwoWeekScheduleByStation(t *testing.T) {
@@ -403,6 +456,50 @@ func TestBroadcastHandler_GetTwoWeekScheduleSelect_DefaultArea(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
 	}
+}
+
+func TestFindLatestTimefreeFromEntries_BroadcastDay(t *testing.T) {
+	now := time.Now()
+	matchingEnd := now.AddDate(0, 0, -2)
+	matchingStart := matchingEnd.Add(-1 * time.Hour)
+	otherEnd := now.AddDate(0, 0, -1)
+	otherStart := otherEnd.Add(-1 * time.Hour)
+	broadcastDay := (int(matchingStart.Weekday()) + 6) % 7
+
+	entries := []map[string]interface{}{
+		{
+			"title": "daily",
+			"date":  matchingStart.Format("20060102"),
+			"ft":    matchingStart.Format("20060102150405"),
+			"to":    matchingEnd.Format("20060102150405"),
+		},
+		{
+			"title": "daily",
+			"date":  otherStart.Format("20060102"),
+			"ft":    otherStart.Format("20060102150405"),
+			"to":    otherEnd.Format("20060102150405"),
+		},
+	}
+
+	t.Run("broadcastDay specified returns latest matching weekday", func(t *testing.T) {
+		got := findLatestTimefreeFromEntries(entries, "daily", &broadcastDay)
+		if got == nil {
+			t.Fatal("got nil, want matching entry")
+		}
+		if got["date"] != matchingStart.Format("20060102") {
+			t.Errorf("date = %v, want %s", got["date"], matchingStart.Format("20060102"))
+		}
+	})
+
+	t.Run("nil broadcastDay returns latest across all weekdays", func(t *testing.T) {
+		got := findLatestTimefreeFromEntries(entries, "daily", nil)
+		if got == nil {
+			t.Fatal("got nil, want latest entry")
+		}
+		if got["date"] != otherStart.Format("20060102") {
+			t.Errorf("date = %v, want %s", got["date"], otherStart.Format("20060102"))
+		}
+	})
 }
 
 func TestFetchXMLHandler_HTTPError(t *testing.T) {

@@ -21,7 +21,7 @@ func fetchXMLHandler(url string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("http.Get %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -234,11 +234,11 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 		if entry := entryForDate(h.radikoService, stationID, title, dateParam); entry != nil {
 			overwriteDetailFromEntry(detail, entry)
 			cast, _ := entry["cast"].(string)
-			latestBroadcast = findLatestTimefreeWithCast(h.radikoService, stationID, title, cast)
+			latestBroadcast = findLatestTimefreeWithCast(h.radikoService, stationID, title, cast, nil)
 		}
 	}
 	if latestBroadcast == nil {
-		latestBroadcast = findLatestTimefree(h.radikoService, stationID, title)
+		latestBroadcast = findLatestTimefree(h.radikoService, stationID, title, nil)
 		if latestBroadcast != nil {
 			overwriteDetailFromEntry(detail, latestBroadcast)
 		}
@@ -257,13 +257,21 @@ func (h *BroadcastHandler) ShowProgramDetail(w http.ResponseWriter, r *http.Requ
 
 // findLatestTimefree は2週間番組表からタイムフリー再生可能な直近放送を返す。
 // 放送終了済み（過去）かつ7日以内のものを対象とし、最新のものを返す。
-func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title string) map[string]interface{} {
-	schedule, err := svc.GetTwoWeekSchedule(stationID)
-	if err != nil || len(schedule) == 0 {
+// broadcastDay が nil でない場合は指定曜日（0=月〜6=日）のみを対象にする。
+func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title string, broadcastDay *int) map[string]interface{} {
+	entries, err := twoWeekEntries(svc, stationID)
+	if err != nil {
 		log.Printf("findLatestTimefree: GetTwoWeekSchedule error: %v", err)
 		return nil
 	}
+	return findLatestTimefreeFromEntries(entries, title, broadcastDay)
+}
 
+func twoWeekEntries(svc service.RadikoApiServiceInterface, stationID string) ([]map[string]interface{}, error) {
+	schedule, err := svc.GetTwoWeekSchedule(stationID)
+	if err != nil || len(schedule) == 0 {
+		return nil, err
+	}
 	var entries []map[string]interface{}
 	switch v := schedule[0]["entries"].(type) {
 	case []map[string]interface{}:
@@ -275,6 +283,10 @@ func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title 
 			}
 		}
 	}
+	return entries, nil
+}
+
+func findLatestTimefreeFromEntries(entries []map[string]interface{}, title string, broadcastDay *int) map[string]interface{} {
 	now := time.Now()
 	timefreeLimitDate := now.AddDate(0, 0, -7)
 
@@ -298,6 +310,12 @@ func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title 
 		if !programEndTime.Before(now) || !programEndTime.After(timefreeLimitDate) {
 			continue
 		}
+		if broadcastDay != nil {
+			wd, ok := entryWeekday(entry)
+			if !ok || wd != *broadcastDay {
+				continue
+			}
+		}
 		if latestBroadcast == nil || programEndTime.After(latestEndTime) {
 			latestBroadcast = entry
 			latestEndTime = programEndTime
@@ -305,6 +323,18 @@ func findLatestTimefree(svc service.RadikoApiServiceInterface, stationID, title 
 	}
 
 	return latestBroadcast
+}
+
+func entryWeekday(entry map[string]interface{}) (int, bool) {
+	ftStr, _ := entry["ft"].(string)
+	if len(ftStr) < 12 {
+		return 0, false
+	}
+	t, err := time.ParseInLocation("20060102150405", ftStr, time.Local)
+	if err != nil {
+		return 0, false
+	}
+	return (int(t.Weekday()) + 6) % 7, true
 }
 
 // entryForDate は指定日付・タイトルに一致する2週間番組表のエントリを返す。
@@ -336,21 +366,10 @@ func entryForDate(svc service.RadikoApiServiceInterface, stationID, title, date 
 
 // findLatestTimefreeWithCast は指定キャストと一致する直近タイムフリー対象放送を返す。
 // 一致するものがなければキャスト不問で findLatestTimefree と同等の結果を返す。
-func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID, title, cast string) map[string]interface{} {
-	schedule, err := svc.GetTwoWeekSchedule(stationID)
-	if err != nil || len(schedule) == 0 {
+func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID, title, cast string, broadcastDay *int) map[string]interface{} {
+	entries, err := twoWeekEntries(svc, stationID)
+	if err != nil {
 		return nil
-	}
-	var entries []map[string]interface{}
-	switch v := schedule[0]["entries"].(type) {
-	case []map[string]interface{}:
-		entries = v
-	case []interface{}:
-		for _, raw := range v {
-			if m, ok := raw.(map[string]interface{}); ok {
-				entries = append(entries, m)
-			}
-		}
 	}
 	now := time.Now()
 	limit := now.AddDate(0, 0, -7)
@@ -373,6 +392,12 @@ func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID
 		if err != nil || !t.Before(now) || !t.After(limit) {
 			continue
 		}
+		if broadcastDay != nil {
+			wd, ok := entryWeekday(e)
+			if !ok || wd != *broadcastDay {
+				continue
+			}
+		}
 		if best == nil || t.After(bestTime) {
 			best = e
 			bestTime = t
@@ -381,40 +406,9 @@ func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID
 	return best
 }
 
-// isTimefreeEligible はエントリが放送終了済みかつ7日以内かを返す。
-func isTimefreeEligible(entry map[string]interface{}) bool {
-	toStr, _ := entry["to"].(string)
-	if len(toStr) < 12 {
-		return false
-	}
-	programEndTime, err := time.ParseInLocation("20060102150405", toStr, time.Local)
-	if err != nil {
-		return false
-	}
-	now := time.Now()
-	return programEndTime.Before(now) && programEndTime.After(now.AddDate(0, 0, -7))
-}
-
 // overwriteDetailFromEntry は日付別エントリの cast・image・desc で detail を上書きする。
 // info は2週間番組表に含まれないため GetProgramDetails の値を維持する。
-// findNextBroadcast は次回放送（未来）のエントリを返す。
-// broadcastDay が nil でない場合は指定曜日（0=月〜6=日）のみを対象にする。
-func findNextBroadcast(svc service.RadikoApiServiceInterface, stationID, title string, broadcastDay *int) map[string]interface{} {
-	schedule, err := svc.GetTwoWeekSchedule(stationID)
-	if err != nil || len(schedule) == 0 {
-		return nil
-	}
-	var entries []map[string]interface{}
-	switch v := schedule[0]["entries"].(type) {
-	case []map[string]interface{}:
-		entries = v
-	case []interface{}:
-		for _, raw := range v {
-			if m, ok := raw.(map[string]interface{}); ok {
-				entries = append(entries, m)
-			}
-		}
-	}
+func findNextBroadcastFromEntries(entries []map[string]interface{}, title string, broadcastDay *int) map[string]interface{} {
 	now := time.Now()
 	var next map[string]interface{}
 	var nextTime time.Time

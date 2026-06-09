@@ -120,8 +120,7 @@ func TestFetchXML(t *testing.T) {
 		// ステータス500でもボディが空ならXML parseエラーになる
 		err := fetchXML(srv.URL, &data)
 		if err == nil {
-			// 空のXMLでもエラーにならない場合がある
-			// 少なくともパニックしないことを確認
+			t.Fatalf("expected XML parse error for empty body")
 		}
 	})
 }

@@ -48,6 +48,7 @@ func TestWriteRouteRateLimitsConfigured(t *testing.T) {
 		`RateLimit(20, time.Minute)).Post("/api/posts/comment"`,
 		`RateLimit(30, time.Minute)).Post("/favorites"`,
 		`RateLimit(30, time.Minute)).Post("/favorites/delete"`,
+		`RateLimit(2, time.Minute)).Post("/favorites/record-all"`,
 		`RateLimit(5, time.Minute)).Post("/recording/timefree/start"`,
 	}
 	for _, needle := range required {
