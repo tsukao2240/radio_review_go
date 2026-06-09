@@ -113,9 +113,12 @@ DB_PASSWORD=password
 
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
 
 RECORDING_STORAGE_PATH=storage/recordings
 RECORDING_MAX_PARALLEL=10
+RECORDING_RETENTION_DAYS=0
 
 MAIL_MAILER=log
 MAIL_HOST=127.0.0.1
@@ -191,7 +194,12 @@ go test -run TestRadikoAuth ./pkg/radiko/
 ### HLS並列ダウンロード
 - `pkg/radiko/hls.go` で実装
 - `errgroup` + `semaphore` で最大N並列（`RECORDING_MAX_PARALLEL` で変更可）
+- `RECORDING_RETENTION_DAYS` が正の整数の場合、保持期間を超過した録音ファイルとRedisメタを削除
 
 ### 録音アクセス制御
 - 録音情報はRedisに `owner_key`（`session_{id}` or `user_{id}`）付きで保存
 - 一覧・履歴は自分の `owner_key` と一致するものだけ返す
+
+### 監視
+- `/healthz`: DB/Redis ping
+- `/metrics`: Prometheus形式のHTTP・録音ジョブメトリクス

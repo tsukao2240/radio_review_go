@@ -7,27 +7,36 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 
+	appmetrics "github.com/tsukao2240/radio_review_go/internal/metrics"
 	"github.com/tsukao2240/radio_review_go/internal/model"
 	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
+type recordingNotificationService interface {
+	CreateRecordingCompleted(sc *model.RecordingSchedule, recordingID string) error
+	CreateRecordingFailed(sc *model.RecordingSchedule, errMsg string) error
+}
+
 // Scheduler は全バックグラウンドジョブを管理する。
 type Scheduler struct {
-	db            *sqlx.DB
-	redis         *redis.Client
-	radikoClient  radiko.ClientInterface
-	hlsDownloader radiko.HLSDownloaderInterface
-	storagePath   string
+	db                  *sqlx.DB
+	redis               *redis.Client
+	radikoClient        radiko.ClientInterface
+	hlsDownloader       radiko.HLSDownloaderInterface
+	storagePath         string
+	retentionDays       int
+	notificationService recordingNotificationService
 }
 
 // NewScheduler は新しい Scheduler を返す。
@@ -44,13 +53,19 @@ func NewScheduler(
 		radikoClient:  radikoClient,
 		hlsDownloader: hlsDownloader,
 		storagePath:   storagePath,
+		retentionDays: recordingRetentionDaysFromEnv(),
 	}
+}
+
+func (s *Scheduler) SetNotificationService(notificationService recordingNotificationService) {
+	s.notificationService = notificationService
 }
 
 // Start は goroutine で全ジョブを開始する。ctx がキャンセルされると全ジョブが停止する。
 func (s *Scheduler) Start(ctx context.Context) {
 	// 毎分実行
 	go s.runEveryMinute(ctx, s.processRecordingSchedules)
+	go s.runEveryMinute(ctx, s.deleteExpiredRecordings)
 	// 5分ごと実行
 	go s.runEveryN(ctx, 5*time.Minute, s.checkFavoriteProgramsBroadcast)
 	// 毎日5:00実行
@@ -58,6 +73,18 @@ func (s *Scheduler) Start(ctx context.Context) {
 	go s.runDailyAt(ctx, 5, 0, s.deleteDuplicateRecords)
 	// 録音情報のRedis TTL失効後に残った音声ファイルを掃除
 	go s.runEveryN(ctx, time.Hour, s.sweepOrphanRecordingFiles)
+}
+
+func recordingRetentionDaysFromEnv() int {
+	raw := os.Getenv("RECORDING_RETENTION_DAYS")
+	if raw == "" {
+		return 0
+	}
+	days, err := strconv.Atoi(raw)
+	if err != nil || days <= 0 {
+		return 0
+	}
+	return days
 }
 
 // runEveryMinute は毎分 fn を実行するループ。
@@ -103,23 +130,80 @@ func (s *Scheduler) SweepOrphanRecordingFiles(ctx context.Context) {
 	s.sweepOrphanRecordingFiles(ctx)
 }
 
+// DeleteExpiredRecordings はテスト用に保持期間超過録音の削除を1回実行する。
+func (s *Scheduler) DeleteExpiredRecordings(ctx context.Context) {
+	s.deleteExpiredRecordings(ctx)
+}
+
+func (s *Scheduler) deleteExpiredRecordings(ctx context.Context) {
+	if s.retentionDays <= 0 {
+		return
+	}
+	appmetrics.IncRecordingJobRun("retention_cleanup")
+	cutoff := time.Now().AddDate(0, 0, -s.retentionDays)
+	deleted := 0
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.redis.Scan(ctx, cursor, "recording_*", 100).Result()
+		if err != nil {
+			appmetrics.IncRecordingJobFailure("retention_cleanup", "redis_scan")
+			slog.Error("[job] deleteExpiredRecordings: Redis scan failed", "error", err)
+			return
+		}
+		for _, key := range keys {
+			raw, err := s.redis.Get(ctx, key).Result()
+			if err != nil {
+				continue
+			}
+			var info model.RecordingInfo
+			if err := json.Unmarshal([]byte(raw), &info); err != nil {
+				continue
+			}
+			createdAt, err := time.Parse(time.RFC3339, info.CreatedAt)
+			if err != nil || createdAt.After(cutoff) {
+				continue
+			}
+			if info.FilePath != "" && isRecordingFilePathAllowed(s.storagePath, info.FilePath) {
+				if err := os.Remove(info.FilePath); err != nil && !os.IsNotExist(err) {
+					appmetrics.IncRecordingJobFailure("retention_cleanup", "remove_file")
+					slog.Error("[job] deleteExpiredRecordings: remove failed", "path", info.FilePath, "error", err)
+					continue
+				}
+			}
+			if err := s.redis.Del(ctx, key).Err(); err != nil {
+				appmetrics.IncRecordingJobFailure("retention_cleanup", "redis_del")
+				slog.Error("[job] deleteExpiredRecordings: Redis delete failed", "key", key, "error", err)
+				continue
+			}
+			deleted++
+		}
+		if nextCursor == 0 {
+			break
+		}
+		cursor = nextCursor
+	}
+	if deleted > 0 {
+		slog.Info("[job] deleteExpiredRecordings: completed", "deleted", deleted, "retention_days", s.retentionDays)
+	}
+}
+
 func (s *Scheduler) sweepOrphanRecordingFiles(ctx context.Context) {
 	activeFiles, err := s.activeRecordingFiles(ctx)
 	if err != nil {
-		log.Printf("[job] sweepOrphanRecordingFiles: Redis 走査エラー: %v", err)
+		slog.Error("[job] sweepOrphanRecordingFiles: Redis scan failed", "error", err)
 		return
 	}
 	cutoff := time.Now().Add(-25 * time.Hour)
 	if err := filepath.WalkDir(s.storagePath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			log.Printf("[job] sweepOrphanRecordingFiles: walk エラー path=%s: %v", path, err)
+			slog.Error("[job] sweepOrphanRecordingFiles: walk failed", "path", path, "error", err)
 			return nil
 		}
 		if d.IsDir() || filepath.Ext(path) != ".aac" {
 			return nil
 		}
 		if !isRecordingFilePathAllowed(s.storagePath, path) {
-			log.Printf("[job] sweepOrphanRecordingFiles: path検証失敗 path=%s", path)
+			slog.Warn("[job] sweepOrphanRecordingFiles: path rejected", "path", path)
 			return nil
 		}
 		cleanPath, err := filepath.Abs(path)
@@ -131,20 +215,20 @@ func (s *Scheduler) sweepOrphanRecordingFiles(ctx context.Context) {
 		}
 		info, err := d.Info()
 		if err != nil {
-			log.Printf("[job] sweepOrphanRecordingFiles: stat エラー path=%s: %v", path, err)
+			slog.Error("[job] sweepOrphanRecordingFiles: stat failed", "path", path, "error", err)
 			return nil
 		}
 		if info.ModTime().After(cutoff) {
 			return nil
 		}
 		if err := os.Remove(path); err != nil {
-			log.Printf("[job] sweepOrphanRecordingFiles: remove エラー path=%s: %v", path, err)
+			slog.Error("[job] sweepOrphanRecordingFiles: remove failed", "path", path, "error", err)
 			return nil
 		}
-		log.Printf("[job] sweepOrphanRecordingFiles: 削除 path=%s", path)
+		slog.Info("[job] sweepOrphanRecordingFiles: removed", "path", path)
 		return nil
 	}); err != nil {
-		log.Printf("[job] sweepOrphanRecordingFiles: WalkDir エラー: %v", err)
+		slog.Error("[job] sweepOrphanRecordingFiles: WalkDir failed", "error", err)
 	}
 }
 
@@ -324,11 +408,11 @@ func (s *Scheduler) InsertRadioPrograms(ctx context.Context) {
 
 // insertRadioPrograms は全局の週間番組表を取得して radio_programs テーブルに UPSERT する。
 func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
-	log.Println("[job] insertRadioPrograms: 開始")
+	slog.Info("[job] insertRadioPrograms: started")
 
 	ids, err := getBroadcastIDs()
 	if err != nil {
-		log.Printf("[job] insertRadioPrograms: getBroadcastIDs エラー: %v", err)
+		slog.Error("[job] insertRadioPrograms: getBroadcastIDs failed", "error", err)
 		return
 	}
 
@@ -342,7 +426,7 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 	for _, stationID := range ids {
 		programs, err := fetchWeeklyPrograms(stationID)
 		if err != nil {
-			log.Printf("[job] insertRadioPrograms: %s の番組取得エラー: %v", stationID, err)
+			slog.Error("[job] insertRadioPrograms: fetch weekly programs failed", "station_id", stationID, "error", err)
 			continue
 		}
 		for _, p := range programs {
@@ -355,7 +439,7 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 	}
 
 	if len(allPrograms) == 0 {
-		log.Println("[job] insertRadioPrograms: 取得できた番組が 0 件のため終了")
+		slog.Info("[job] insertRadioPrograms: no programs fetched")
 		return
 	}
 
@@ -374,15 +458,18 @@ func (s *Scheduler) insertRadioPrograms(ctx context.Context) {
 		for _, p := range batch {
 			prog := p
 			if err := upsertRadioProgram(s.db, &prog); err != nil {
-				log.Printf("[job] insertRadioPrograms: upsert エラー (station=%s title=%s): %v",
-					prog.StationID, prog.Title, err)
+				slog.Error("[job] insertRadioPrograms: upsert failed",
+					"station_id", prog.StationID,
+					"title", prog.Title,
+					"error", err,
+				)
 				continue
 			}
 			upserted++
 		}
 	}
 
-	log.Printf("[job] insertRadioPrograms: 完了 (upsert 件数: %d / %d)", upserted, total)
+	slog.Info("[job] insertRadioPrograms: completed", "upserted", upserted, "total", total)
 }
 
 // upsertRadioProgram は (station_id, title, cast) をキーに INSERT ... ON DUPLICATE KEY UPDATE する。
@@ -408,7 +495,7 @@ func upsertRadioProgram(db *sqlx.DB, program *model.RadioProgram) error {
 // deleteDuplicateRecords はタイトルが重複している radio_programs レコードのうち
 // min(id) 以外を削除する。
 func (s *Scheduler) deleteDuplicateRecords(ctx context.Context) {
-	log.Println("[job] deleteDuplicateRecords: 開始")
+	slog.Info("[job] deleteDuplicateRecords: started")
 
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM radio_programs
@@ -421,11 +508,11 @@ func (s *Scheduler) deleteDuplicateRecords(ctx context.Context) {
 		 )`,
 	)
 	if err != nil {
-		log.Printf("[job] deleteDuplicateRecords: DELETE エラー: %v", err)
+		slog.Error("[job] deleteDuplicateRecords: delete failed", "error", err)
 		return
 	}
 
-	log.Println("[job] deleteDuplicateRecords: 完了")
+	slog.Info("[job] deleteDuplicateRecords: completed")
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +526,8 @@ func (s *Scheduler) processRecordingSchedules(ctx context.Context) {
 
 	schedules, err := findPendingBefore(s.db, now)
 	if err != nil {
-		log.Printf("[job] processRecordingSchedules: FindPendingBefore エラー: %v", err)
+		appmetrics.IncRecordingJobFailure("process_schedules", "find_pending")
+		slog.Error("[job] processRecordingSchedules: FindPendingBefore failed", "error", err)
 		return
 	}
 
@@ -447,7 +535,7 @@ func (s *Scheduler) processRecordingSchedules(ctx context.Context) {
 		return
 	}
 
-	log.Printf("[job] processRecordingSchedules: %d 件の録音予約を処理", len(schedules))
+	slog.Info("[job] processRecordingSchedules: schedules found", "count", len(schedules))
 
 	for _, sc := range schedules {
 		sc := sc // ループ変数コピー
@@ -457,11 +545,13 @@ func (s *Scheduler) processRecordingSchedules(ctx context.Context) {
 
 // startScheduledRecording は録音スケジュールの録音を開始し、完了・失敗を DB に反映する。
 func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.RecordingSchedule) {
-	log.Printf("[job] 録音開始: id=%d station=%s title=%s", sc.ID, sc.StationID, sc.ProgramTitle)
+	appmetrics.IncRecordingJobRun("scheduled_recording")
+	slog.Info("[job] scheduled recording started", "id", sc.ID, "station_id", sc.StationID, "title", sc.ProgramTitle)
 
 	// ステータスを recording に更新
 	if err := updateScheduleStatus(s.db, sc.ID, "recording", nil); err != nil {
-		log.Printf("[job] startScheduledRecording: recording ステータス更新エラー (id=%d): %v", sc.ID, err)
+		appmetrics.IncRecordingJobFailure("scheduled_recording", "status_recording")
+		slog.Error("[job] startScheduledRecording: recording status update failed", "id", sc.ID, "error", err)
 		return
 	}
 
@@ -472,9 +562,10 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 	authToken, err := s.radikoClient.GetAuthToken(ctx, areaID)
 	if err != nil {
 		errMsg := fmt.Sprintf("認証トークン取得エラー: %v", err)
-		log.Printf("[job] startScheduledRecording (id=%d): %s", sc.ID, errMsg)
+		appmetrics.IncRecordingJobFailure("scheduled_recording", "auth_token")
+		slog.Error("[job] startScheduledRecording: auth token failed", "id", sc.ID, "error", err)
 		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
-		_ = createRecordingFailedNotification(s.db, sc, errMsg)
+		s.notifyRecordingFailed(sc, errMsg)
 		return
 	}
 
@@ -486,9 +577,10 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 
 	if err := os.MkdirAll(s.storagePath, 0755); err != nil {
 		errMsg := fmt.Sprintf("保存ディレクトリ作成エラー: %v", err)
-		log.Printf("[job] startScheduledRecording (id=%d): %s", sc.ID, errMsg)
+		appmetrics.IncRecordingJobFailure("scheduled_recording", "mkdir")
+		slog.Error("[job] startScheduledRecording: mkdir failed", "id", sc.ID, "path", s.storagePath, "error", err)
 		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
-		_ = createRecordingFailedNotification(s.db, sc, errMsg)
+		s.notifyRecordingFailed(sc, errMsg)
 		return
 	}
 
@@ -506,36 +598,37 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		CreatedAt:   time.Now().Format(time.RFC3339),
 	}
 	if err := saveRecordingInfo(ctx, s.redis, recordingID, info); err != nil {
-		log.Printf("[job] startScheduledRecording (id=%d): Redis 保存エラー: %v", sc.ID, err)
+		slog.Error("[job] startScheduledRecording: Redis save failed", "id", sc.ID, "error", err)
 		// Redis 保存失敗は録音処理を止める理由にはしない
 	}
 
 	// スケジュールに録音 ID を保存
 	if err := setScheduleRecordingID(s.db, sc.ID, recordingID); err != nil {
-		log.Printf("[job] startScheduledRecording (id=%d): recording_id 保存エラー: %v", sc.ID, err)
+		slog.Error("[job] startScheduledRecording: recording_id save failed", "id", sc.ID, "recording_id", recordingID, "error", err)
 	}
 
 	// HLS ダウンロード（タイムフリー録音）
 	if err := s.hlsDownloader.DownloadTimefree(ctx, authToken, sc.StationID, startFmt, endFmt, areaID, outputPath); err != nil {
 		errMsg := fmt.Sprintf("録音エラー: %v", err)
-		log.Printf("[job] startScheduledRecording (id=%d): %s", sc.ID, errMsg)
+		appmetrics.IncRecordingJobFailure("scheduled_recording", "download")
+		slog.Error("[job] startScheduledRecording: download failed", "id", sc.ID, "error", err)
 		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
 		_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed", errMsg)
-		_ = createRecordingFailedNotification(s.db, sc, errMsg)
+		s.notifyRecordingFailed(sc, errMsg)
 		return
 	}
 
 	// 完了処理
 	_ = updateScheduleStatus(s.db, sc.ID, "completed", nil)
 	_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "completed", "")
-	_ = createRecordingStartNotification(s.db, sc, recordingID)
+	s.notifyRecordingCompleted(sc, recordingID)
 
-	log.Printf("[job] 録音完了: id=%d recording_id=%s", sc.ID, recordingID)
+	slog.Info("[job] scheduled recording completed", "id", sc.ID, "recording_id", recordingID)
 
 	// 定期録音の場合は次回スケジュールを自動生成する
 	if sc.IsRecurring && sc.RecurrenceType != nil {
 		if err := s.createNextRecurringSchedule(sc); err != nil {
-			log.Printf("[job] 次回定期録音スケジュール生成エラー (id=%d): %v", sc.ID, err)
+			slog.Error("[job] next recurring schedule creation failed", "id", sc.ID, "error", err)
 		}
 	}
 }
@@ -581,9 +674,31 @@ func (s *Scheduler) createNextRecurringSchedule(sc *model.RecordingSchedule) err
 	}
 
 	newID, _ := res.LastInsertId()
-	log.Printf("[job] 次回定期録音スケジュール生成: id=%d station=%s title=%s start=%s",
-		newID, sc.StationID, sc.ProgramTitle, nextStart.Format("2006-01-02 15:04"))
+	slog.Info("[job] next recurring schedule created",
+		"id", newID,
+		"station_id", sc.StationID,
+		"title", sc.ProgramTitle,
+		"start", nextStart.Format("2006-01-02 15:04"),
+	)
 	return nil
+}
+
+func (s *Scheduler) notifyRecordingCompleted(sc *model.RecordingSchedule, recordingID string) {
+	if s.notificationService == nil {
+		return
+	}
+	if err := s.notificationService.CreateRecordingCompleted(sc, recordingID); err != nil {
+		slog.Error("[job] recording completed notification failed", "schedule_id", sc.ID, "error", err)
+	}
+}
+
+func (s *Scheduler) notifyRecordingFailed(sc *model.RecordingSchedule, errMsg string) {
+	if s.notificationService == nil {
+		return
+	}
+	if err := s.notificationService.CreateRecordingFailed(sc, errMsg); err != nil {
+		slog.Error("[job] recording failed notification failed", "schedule_id", sc.ID, "error", err)
+	}
 }
 
 // findPendingBefore は status=pending かつ scheduled_start_time <= t のスケジュールを返す。
@@ -703,19 +818,19 @@ func insertNotification(db *sqlx.DB, n *model.Notification) error {
 // checkFavoriteProgramsBroadcast は全ユーザーのお気に入り番組を確認し、
 // 5分以内に放送開始する番組のユーザーへ通知を作成する。
 func (s *Scheduler) checkFavoriteProgramsBroadcast(ctx context.Context) {
-	log.Println("[job] checkFavoriteProgramsBroadcast: 開始")
+	slog.Info("[job] checkFavoriteProgramsBroadcast: started")
 
 	// 全お気に入り番組を取得
 	var favorites []model.FavoriteProgram
 	if err := s.db.SelectContext(ctx, &favorites,
 		"SELECT * FROM favorite_programs ORDER BY created_at DESC",
 	); err != nil {
-		log.Printf("[job] checkFavoriteProgramsBroadcast: SELECT エラー: %v", err)
+		slog.Error("[job] checkFavoriteProgramsBroadcast: select failed", "error", err)
 		return
 	}
 
 	if len(favorites) == 0 {
-		log.Println("[job] checkFavoriteProgramsBroadcast: お気に入り番組が登録されていません")
+		slog.Info("[job] checkFavoriteProgramsBroadcast: no favorites")
 		return
 	}
 
@@ -758,17 +873,19 @@ func (s *Scheduler) checkFavoriteProgramsBroadcast(ctx context.Context) {
 		// 5分以内に放送開始する番組を検出
 		if progHHmm >= nowHHmm && progHHmm <= fiveMinLater {
 			if err := createFavoriteBroadcastNotification(s.db, &fav, &program); err != nil {
-				log.Printf("[job] checkFavoriteProgramsBroadcast: 通知作成エラー (fav_id=%d): %v",
-					fav.ID, err)
+				slog.Error("[job] checkFavoriteProgramsBroadcast: notification failed", "favorite_id", fav.ID, "error", err)
 				continue
 			}
 			notifCount++
-			log.Printf("[job] 放送通知: user_id=%d station=%s title=%s",
-				fav.UserID, fav.StationID, fav.ProgramTitle)
+			slog.Info("[job] favorite broadcast notification created",
+				"user_id", fav.UserID,
+				"station_id", fav.StationID,
+				"title", fav.ProgramTitle,
+			)
 		}
 	}
 
-	log.Printf("[job] checkFavoriteProgramsBroadcast: 完了 (通知: %d 件)", notifCount)
+	slog.Info("[job] checkFavoriteProgramsBroadcast: completed", "notifications", notifCount)
 }
 
 // createFavoriteBroadcastNotification はお気に入り番組の放送開始通知を notifications に INSERT する。
