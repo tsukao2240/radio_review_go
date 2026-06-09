@@ -82,7 +82,7 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("radiko auth1: HTTPリクエストエラー: %w", err)
 	}
-	defer resp1.Body.Close()
+	defer func() { _ = resp1.Body.Close() }()
 
 	if resp1.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("radiko auth1: HTTPステータスエラー: %d", resp1.StatusCode)
@@ -149,7 +149,7 @@ func (c *Client) GetAuthToken(ctx context.Context, areaID string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("radiko auth2: HTTPリクエストエラー: %w", err)
 	}
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 
 	if resp2.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("radiko auth2: HTTPステータスエラー: %d", resp2.StatusCode)

@@ -1,0 +1,24 @@
+run:
+  timeout: 5m
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (net/http.ResponseWriter).Write
+
+linters:
+  enable:
+    - errcheck
+    - gofmt
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+
+issues:
+  exclude-use-default: false
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck

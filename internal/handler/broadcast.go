@@ -21,7 +21,7 @@ func fetchXMLHandler(url string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("http.Get %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -406,32 +406,8 @@ func findLatestTimefreeWithCast(svc service.RadikoApiServiceInterface, stationID
 	return best
 }
 
-// isTimefreeEligible はエントリが放送終了済みかつ7日以内かを返す。
-func isTimefreeEligible(entry map[string]interface{}) bool {
-	toStr, _ := entry["to"].(string)
-	if len(toStr) < 12 {
-		return false
-	}
-	programEndTime, err := time.ParseInLocation("20060102150405", toStr, time.Local)
-	if err != nil {
-		return false
-	}
-	now := time.Now()
-	return programEndTime.Before(now) && programEndTime.After(now.AddDate(0, 0, -7))
-}
-
 // overwriteDetailFromEntry は日付別エントリの cast・image・desc で detail を上書きする。
 // info は2週間番組表に含まれないため GetProgramDetails の値を維持する。
-// findNextBroadcast は次回放送（未来）のエントリを返す。
-// broadcastDay が nil でない場合は指定曜日（0=月〜6=日）のみを対象にする。
-func findNextBroadcast(svc service.RadikoApiServiceInterface, stationID, title string, broadcastDay *int) map[string]interface{} {
-	entries, err := twoWeekEntries(svc, stationID)
-	if err != nil {
-		return nil
-	}
-	return findNextBroadcastFromEntries(entries, title, broadcastDay)
-}
-
 func findNextBroadcastFromEntries(entries []map[string]interface{}, title string, broadcastDay *int) map[string]interface{} {
 	now := time.Now()
 	var next map[string]interface{}

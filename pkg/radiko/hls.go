@@ -102,7 +102,7 @@ func (d *HLSDownloader) DownloadTimefree(ctx context.Context, authToken, station
 	if err != nil {
 		return fmt.Errorf("os.Create %s: %w", outputPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	for i, data := range results {
 		if _, err := f.Write(data); err != nil {
@@ -134,7 +134,7 @@ func (d *HLSDownloader) fetchSegmentURLsDepth(ctx context.Context, playlistURL, 
 	if err != nil {
 		return nil, fmt.Errorf("GET playlist: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET playlist returned status %d", resp.StatusCode)
@@ -317,7 +317,7 @@ func (d *HLSDownloader) fetchTimefreePlaylistCreateURL(ctx context.Context, stat
 	if err != nil {
 		return "", fmt.Errorf("GET stream info: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GET stream info returned status %d", resp.StatusCode)
@@ -414,7 +414,7 @@ func (d *HLSDownloader) fetchSegment(ctx context.Context, segURL, authToken stri
 	if err != nil {
 		return nil, fmt.Errorf("GET segment: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET segment returned status %d", resp.StatusCode)

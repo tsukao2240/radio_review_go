@@ -355,7 +355,7 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 			writeError(w, http.StatusInternalServerError, "ファイルのオープンに失敗しました: "+err.Error())
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		downloadName := info.ProgramName + ".aac"
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -405,7 +405,7 @@ func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFun
 			writeError(w, http.StatusInternalServerError, "ファイルのオープンに失敗しました: "+err.Error())
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		stat, err := f.Stat()
 		if err != nil {
