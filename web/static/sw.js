@@ -1,5 +1,6 @@
 const CACHE_VERSION = 'v1.0.1';
 const CACHE_NAME = `radio-review-${CACHE_VERSION}`;
+const RECORDING_CACHE_NAME = `radio-review-recordings-${CACHE_VERSION}`;
 
 // キャッシュするリソースのリスト
 const STATIC_CACHE_URLS = [
@@ -39,7 +40,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheName !== CACHE_NAME && cacheName !== RECORDING_CACHE_NAME) {
             console.log('[ServiceWorker] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
@@ -63,6 +64,11 @@ self.addEventListener('fetch', (event) => {
 
   // APIリクエストとGET以外はService Workerを通さない
   if (url.pathname.startsWith('/api/') || request.method !== 'GET') {
+    return;
+  }
+
+  if (url.pathname === '/recording/stream' || url.pathname === '/recording/download') {
+    event.respondWith(recordingCacheResponse(request));
     return;
   }
 
@@ -96,6 +102,59 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+function recordingCacheKey(url) {
+  const recordingId = url.searchParams.get('recording_id');
+  if (!recordingId) {
+    return null;
+  }
+  return `${location.origin}/recording/stream?recording_id=${encodeURIComponent(recordingId)}`;
+}
+
+async function recordingCacheResponse(request) {
+  const url = new URL(request.url);
+  const cacheKey = recordingCacheKey(url);
+  if (!cacheKey) {
+    return fetch(request);
+  }
+  const cache = await caches.open(RECORDING_CACHE_NAME);
+  const cached = await cache.match(cacheKey);
+  if (!cached) {
+    return fetch(request);
+  }
+
+  const range = request.headers.get('range');
+  if (!range) {
+    return cached;
+  }
+
+  const buffer = await cached.arrayBuffer();
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+  if (!match) {
+    return cached;
+  }
+  const start = match[1] ? Number(match[1]) : 0;
+  const end = match[2] ? Number(match[2]) : buffer.byteLength - 1;
+  if (start >= buffer.byteLength || end >= buffer.byteLength || start > end) {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        'Content-Range': `bytes */${buffer.byteLength}`
+      }
+    });
+  }
+  const sliced = buffer.slice(start, end + 1);
+  return new Response(sliced, {
+    status: 206,
+    statusText: 'Partial Content',
+    headers: {
+      'Content-Type': cached.headers.get('Content-Type') || 'audio/aac',
+      'Content-Length': String(sliced.byteLength),
+      'Content-Range': `bytes ${start}-${end}/${buffer.byteLength}`,
+      'Accept-Ranges': 'bytes'
+    }
+  });
+}
+
 // メッセージイベント - キャッシュのクリア
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
@@ -119,7 +178,34 @@ self.addEventListener('message', (event) => {
       })
     );
   }
+
+  if (event.data && event.data.type === 'CACHE_RECORDING') {
+    event.waitUntil(cacheRecording(event.data));
+  }
 });
+
+async function cacheRecording(data) {
+  const clientsList = await self.clients.matchAll();
+  const notify = (message) => {
+    clientsList.forEach((client) => client.postMessage(message));
+  };
+  try {
+    const url = new URL(data.url, location.origin);
+    const cacheKey = recordingCacheKey(url);
+    if (!cacheKey) {
+      throw new Error('recording_id is required');
+    }
+    const response = await fetch(url.toString(), { credentials: 'same-origin' });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const cache = await caches.open(RECORDING_CACHE_NAME);
+    await cache.put(cacheKey, response.clone());
+    notify({ type: 'RECORDING_CACHED', recordingId: data.recordingId });
+  } catch (error) {
+    notify({ type: 'RECORDING_CACHE_FAILED', recordingId: data.recordingId, error: String(error) });
+  }
+}
 
 // プッシュ通知イベント
 self.addEventListener('push', (event) => {
@@ -127,7 +213,12 @@ self.addEventListener('push', (event) => {
     return;
   }
 
-  const data = event.data.json();
+  let data = {};
+  try {
+    data = event.data.json();
+  } catch (error) {
+    data = { title: 'RadioProgram Review', body: event.data.text() };
+  }
   const options = {
     body: data.body || '新しい通知があります',
     icon: '/static/icons/icon-192x192.png',
@@ -135,7 +226,8 @@ self.addEventListener('push', (event) => {
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
-      primaryKey: data.id
+      primaryKey: data.id,
+      url: data.url || '/'
     }
   };
 
@@ -149,6 +241,6 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   event.waitUntil(
-    clients.openWindow('/')
+    clients.openWindow(event.notification.data && event.notification.data.url ? event.notification.data.url : '/')
   );
 });
