@@ -6,12 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 codex は agmsg 上で既定の作業ディレクトリが `niksy`（Swift Package）になっており、ディレクトリ指定の無い依頼は radio_review_go ではなく niksy で実行され失敗する。codex への全修正依頼で以下を必須とする。
 
-- メッセージ冒頭に「★必ず作業前に `cd /Users/takafumiotsuka/project/radio_review_go` し、pwd・go.mod・`git branch --show-current` を確認」を記載する。
+- 依頼時は対象リポジトリの絶対パスを必ず指定する。メッセージ冒頭に「★必ず作業前に `cd /Users/takafumiotsuka/project/radio_review_go` し、pwd・go.mod・`git branch --show-current` を確認」を記載する。
 - メッセージ末尾に `dir:/Users/takafumiotsuka/project/radio_review_go` を付ける。
 - これらを欠いたまま送信しない。
 - 同一内容を 3 回以上送らない。2 回失敗したら文面矯正では解決不能と判断し、codex 側の再起動/設定変更をユーザーに要請する。
 
-役割分担: 修正実行は codex。claude は依頼文の作成と検証（gofmt/go vet/go test）に徹し、自分でコード修正を実行しない。
+codex の状態報告は非権威として扱う。codex は既定で別ディレクトリ（niksy）にいるため、`git status`・検証結果・「作業なし」判定が誤ったディレクトリ基準のことがある。権威ある検証は claude が本リポジトリの実ディレクトリで `git status`/lint/test を実行して確認すること。
+
+役割分担: 実装は codex。claude は依頼文の作成・検証（gofmt/go vet/golangci-lint/go test）・コミットを担当する。codex は実装してもコミットしない傾向があるため、コミットは claude が行う（git 操作は claude 担当。コード修正は claude が行わない）。
 
 ## 動作指針 (Filesystem First)
 
