@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newTestClient は httptest.Server を使うテスト用 Client を返す。
@@ -181,6 +182,79 @@ func TestFetchSegment_NonOKStatus(t *testing.T) {
 	_, err := d.fetchSegment(context.Background(), srv.URL+"/seg.ts", "tok")
 	if err == nil {
 		t.Fatal("expected error for 500, got nil")
+	}
+}
+
+func TestFetchSegmentWithRetry_RetriesTemporaryStatus(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			http.Error(w, "temporary", http.StatusBadGateway)
+			return
+		}
+		fmt.Fprint(w, "ok")
+	}))
+	defer srv.Close()
+
+	d := &HLSDownloader{
+		client:                newTestClient(srv.Client()),
+		maxParallel:           2,
+		segmentRetryAttempts:  2,
+		segmentRetryBaseDelay: time.Millisecond,
+	}
+	got, err := d.fetchSegmentWithRetry(context.Background(), srv.URL+"/seg.ts", "tok")
+	if err != nil {
+		t.Fatalf("fetchSegmentWithRetry: %v", err)
+	}
+	if string(got) != "ok" {
+		t.Fatalf("data = %q, want ok", got)
+	}
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
+func TestFetchSegmentWithRetry_DoesNotRetryClientStatus(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	d := &HLSDownloader{
+		client:                newTestClient(srv.Client()),
+		maxParallel:           2,
+		segmentRetryAttempts:  3,
+		segmentRetryBaseDelay: time.Millisecond,
+	}
+	if _, err := d.fetchSegmentWithRetry(context.Background(), srv.URL+"/seg.ts", "tok"); err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1", calls)
+	}
+}
+
+func TestVerifyDownloadedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.aac")
+	if err := os.WriteFile(path, []byte("audio"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := verifyDownloadedFile(path, 2, []bool{true, true}); err != nil {
+		t.Fatalf("verifyDownloadedFile: %v", err)
+	}
+	if err := verifyDownloadedFile(path, 2, []bool{true, false}); err == nil {
+		t.Fatal("expected segment mismatch error")
+	}
+	emptyPath := filepath.Join(dir, "empty.aac")
+	if err := os.WriteFile(emptyPath, nil, 0644); err != nil {
+		t.Fatalf("WriteFile empty: %v", err)
+	}
+	if err := verifyDownloadedFile(emptyPath, 1, []bool{true}); err == nil {
+		t.Fatal("expected empty file error")
 	}
 }
 

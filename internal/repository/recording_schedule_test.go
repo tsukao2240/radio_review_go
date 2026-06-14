@@ -25,9 +25,9 @@ func recordingScheduleRows() *sqlmock.Rows {
 	now := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
 	return sqlmock.NewRows([]string{
 		"id", "user_id", "station_id", "program_title", "scheduled_start_time", "scheduled_end_time",
-		"status", "recording_id", "error_message", "is_recurring", "recurrence_type", "parent_schedule_id",
+		"status", "recording_id", "error_message", "retry_count", "is_recurring", "recurrence_type", "parent_schedule_id",
 		"created_at", "updated_at",
-	}).AddRow(int64(3), int64(2), "TBS", "morning show", now, now.Add(time.Hour), "pending", nil, nil, false, nil, nil, now, now)
+	}).AddRow(int64(3), int64(2), "TBS", "morning show", now, now.Add(time.Hour), "pending", nil, nil, 0, false, nil, nil, now, now)
 }
 
 func TestRecordingScheduleRepositoryFindByUser(t *testing.T) {
@@ -137,6 +137,11 @@ func TestRecordingScheduleRepositoryMutations(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE recording_schedules SET status = ?, error_message = ?, updated_at = NOW() WHERE id = ?")).
 		WithArgs("failed", &msg, int64(3)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE recording_schedules
+		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?, updated_at = NOW()
+		 WHERE id = ?`)).
+		WithArgs(&msg, int64(3)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE recording_schedules SET recording_id = ?, updated_at = NOW() WHERE id = ?")).
 		WithArgs("rec-1", int64(3)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -146,6 +151,9 @@ func TestRecordingScheduleRepositoryMutations(t *testing.T) {
 
 	if err := repo.UpdateStatus(3, "failed", &msg); err != nil {
 		t.Fatalf("UpdateStatus: %v", err)
+	}
+	if err := repo.IncrementRetryCount(3, &msg); err != nil {
+		t.Fatalf("IncrementRetryCount: %v", err)
 	}
 	if err := repo.SetRecordingID(3, "rec-1"); err != nil {
 		t.Fatalf("SetRecordingID: %v", err)

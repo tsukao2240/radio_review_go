@@ -47,7 +47,8 @@ func (r *stubScheduleRepo) UpdateStatus(id int64, status string, errMsg *string)
 	}
 	return nil
 }
-func (r *stubScheduleRepo) SetRecordingID(id int64, recordingID string) error { return nil }
+func (r *stubScheduleRepo) IncrementRetryCount(id int64, errMsg *string) error { return nil }
+func (r *stubScheduleRepo) SetRecordingID(id int64, recordingID string) error  { return nil }
 func (r *stubScheduleRepo) Cancel(id int64) error {
 	if r.cancelFunc != nil {
 		return r.cancelFunc(id)

@@ -85,6 +85,19 @@ func (r *RecordingScheduleRepository) UpdateStatus(id int64, status string, errM
 	return nil
 }
 
+func (r *RecordingScheduleRepository) IncrementRetryCount(id int64, errMsg *string) error {
+	_, err := r.db.Exec(
+		`UPDATE recording_schedules
+		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?, updated_at = NOW()
+		 WHERE id = ?`,
+		errMsg, id,
+	)
+	if err != nil {
+		return fmt.Errorf("repository.RecordingScheduleRepository.IncrementRetryCount: %w", err)
+	}
+	return nil
+}
+
 func (r *RecordingScheduleRepository) SetRecordingID(id int64, recordingID string) error {
 	_, err := r.db.Exec(
 		"UPDATE recording_schedules SET recording_id = ?, updated_at = NOW() WHERE id = ?",

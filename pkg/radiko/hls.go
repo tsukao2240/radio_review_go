@@ -3,11 +3,14 @@ package radiko
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
+	mathrand "math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,8 +31,10 @@ type HLSDownloaderInterface interface {
 
 // HLSDownloader はHLSダウンロードの実装。
 type HLSDownloader struct {
-	client      *Client
-	maxParallel int64
+	client                *Client
+	maxParallel           int64
+	segmentRetryAttempts  int
+	segmentRetryBaseDelay time.Duration
 }
 
 // NewHLSDownloader は新しいHLSDownloaderを返す。
@@ -38,8 +43,10 @@ func NewHLSDownloader(client *Client, maxParallel int64) *HLSDownloader {
 		maxParallel = 10
 	}
 	return &HLSDownloader{
-		client:      client,
-		maxParallel: maxParallel,
+		client:                client,
+		maxParallel:           maxParallel,
+		segmentRetryAttempts:  4,
+		segmentRetryBaseDelay: 200 * time.Millisecond,
 	}
 }
 
@@ -73,6 +80,7 @@ func (d *HLSDownloader) DownloadTimefree(ctx context.Context, authToken, station
 
 	// 3. セグメントを並列ダウンロード
 	results := make([][]byte, len(segmentURLs))
+	completed := make([]bool, len(segmentURLs))
 	g, gctx := errgroup.WithContext(ctx)
 	sem := semaphore.NewWeighted(d.maxParallel)
 
@@ -84,11 +92,12 @@ func (d *HLSDownloader) DownloadTimefree(ctx context.Context, authToken, station
 			}
 			defer sem.Release(1)
 
-			data, err := d.fetchSegment(gctx, u, authToken)
+			data, err := d.fetchSegmentWithRetry(gctx, u, authToken)
 			if err != nil {
 				return fmt.Errorf("fetchSegment[%d] %s: %w", i, u, err)
 			}
 			results[i] = data
+			completed[i] = true
 			return nil
 		})
 	}
@@ -105,12 +114,97 @@ func (d *HLSDownloader) DownloadTimefree(ctx context.Context, authToken, station
 	defer func() { _ = f.Close() }()
 
 	for i, data := range results {
+		if !completed[i] {
+			return fmt.Errorf("segment[%d] was not downloaded", i)
+		}
 		if _, err := f.Write(data); err != nil {
 			return fmt.Errorf("write segment[%d]: %w", i, err)
 		}
 	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close output %s: %w", outputPath, err)
+	}
+	if err := verifyDownloadedFile(outputPath, len(segmentURLs), completed); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func (d *HLSDownloader) fetchSegmentWithRetry(ctx context.Context, segURL, authToken string) ([]byte, error) {
+	attempts := d.segmentRetryAttempts
+	if attempts <= 0 {
+		attempts = 4
+	}
+	baseDelay := d.segmentRetryBaseDelay
+	if baseDelay <= 0 {
+		baseDelay = 200 * time.Millisecond
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		data, err := d.fetchSegment(ctx, segURL, authToken)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+		if attempt == attempts || !isRetryableSegmentError(err) {
+			break
+		}
+		delay := baseDelay * time.Duration(1<<(attempt-1))
+		jitter := time.Duration(mathrand.Int64N(int64(delay / 2)))
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay + jitter):
+		}
+	}
+	return nil, lastErr
+}
+
+func verifyDownloadedFile(outputPath string, expectedSegments int, completed []bool) error {
+	actualSegments := 0
+	for _, ok := range completed {
+		if ok {
+			actualSegments++
+		}
+	}
+	if actualSegments != expectedSegments {
+		return fmt.Errorf("downloaded segments mismatch: got %d, want %d", actualSegments, expectedSegments)
+	}
+	stat, err := os.Stat(outputPath)
+	if err != nil {
+		return fmt.Errorf("stat output %s: %w", outputPath, err)
+	}
+	if stat.Size() <= 0 {
+		return fmt.Errorf("output file is empty: %s", outputPath)
+	}
+	return nil
+}
+
+type segmentStatusError struct {
+	statusCode int
+}
+
+func (e segmentStatusError) Error() string {
+	return fmt.Sprintf("GET segment returned status %d", e.statusCode)
+}
+
+func isRetryableSegmentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var statusErr segmentStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.statusCode == http.StatusRequestTimeout ||
+			statusErr.statusCode == http.StatusTooManyRequests ||
+			statusErr.statusCode >= http.StatusInternalServerError
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 // fetchSegmentURLs はm3u8プレイリストを取得し、セグメントURLの一覧を返す。
@@ -297,7 +391,7 @@ func normalizeRadikoTimestamp(value string) (string, error) {
 
 func randomLSID() string {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	if _, err := cryptorand.Read(b[:]); err != nil {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b[:])
@@ -417,7 +511,7 @@ func (d *HLSDownloader) fetchSegment(ctx context.Context, segURL, authToken stri
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET segment returned status %d", resp.StatusCode)
+		return nil, segmentStatusError{statusCode: resp.StatusCode}
 	}
 
 	data, err := io.ReadAll(resp.Body)

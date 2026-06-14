@@ -395,7 +395,38 @@ func TestStartScheduledRecordingNotifiesCompleted(t *testing.T) {
 	}
 }
 
-func TestStartScheduledRecordingNotifiesFailed(t *testing.T) {
+func TestStartScheduledRecordingQueuesRetryBeforeLimit(t *testing.T) {
+	db, mock := newSchedulerSQLMock(t)
+	defer db.Close()
+	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+		WithArgs("recording", nil, int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE recording_schedules").
+		WithArgs(sqlmock.AnyArg(), int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	notifier := &stubRecordingNotificationService{}
+	s := NewScheduler(db, rdb, stubSchedulerRadikoClient{err: errors.New("auth failed")}, stubSchedulerHLSDownloader{}, t.TempDir())
+	s.SetNotificationService(notifier)
+	s.startScheduledRecording(context.Background(), testRecordingSchedule())
+
+	if notifier.completed != 0 || notifier.failed != 0 {
+		t.Fatalf("notifications completed=%d failed=%d", notifier.completed, notifier.failed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestStartScheduledRecordingNotifiesFailedAtRetryLimit(t *testing.T) {
 	db, mock := newSchedulerSQLMock(t)
 	defer db.Close()
 	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
@@ -416,7 +447,9 @@ func TestStartScheduledRecordingNotifiesFailed(t *testing.T) {
 	notifier := &stubRecordingNotificationService{}
 	s := NewScheduler(db, rdb, stubSchedulerRadikoClient{err: errors.New("auth failed")}, stubSchedulerHLSDownloader{}, t.TempDir())
 	s.SetNotificationService(notifier)
-	s.startScheduledRecording(context.Background(), testRecordingSchedule())
+	sc := testRecordingSchedule()
+	sc.RetryCount = maxScheduledRecordingRetries
+	s.startScheduledRecording(context.Background(), sc)
 
 	if notifier.completed != 0 || notifier.failed != 1 {
 		t.Fatalf("notifications completed=%d failed=%d", notifier.completed, notifier.failed)

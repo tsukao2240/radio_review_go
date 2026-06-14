@@ -75,6 +75,7 @@ type RecordingSchedule struct {
 	Status             string    `db:"status"` // pending/recording/completed/failed/cancelled
 	RecordingID        *string   `db:"recording_id"`
 	ErrorMessage       *string   `db:"error_message"`
+	RetryCount         int       `db:"retry_count"`
 	IsRecurring        bool      `db:"is_recurring"`       // 定期録音フラグ
 	RecurrenceType     *string   `db:"recurrence_type"`    // "weekly" など
 	ParentScheduleID   *int64    `db:"parent_schedule_id"` // 前回スケジュールのID
