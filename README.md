@@ -222,6 +222,18 @@ CI（`.github/workflows/ci.yml`）も同一バージョンの golangci-lint を�
 - 録音情報はRedisに `owner_key`（`session_{id}` or `user_{id}`）付きで保存
 - 一覧・履歴は自分の `owner_key` と一致するものだけ返す
 
+### Web Push
+- `VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`、`VAPID_SUBJECT` が全て設定されている場合のみ有効
+- 未設定時は購読APIを無効化し、アプリ内通知DBの作成は継続
+- 鍵ペア生成例:
+
+```bash
+go run github.com/SherClockHolmes/webpush-go@v1.4.0
+```
+
+- 出力された公開鍵・秘密鍵を `.env` に設定する
+- `VAPID_SUBJECT` は `mailto:admin@example.com` 形式、またはサイトURLを指定する
+
 ### 監視
 - `/healthz`: DB/Redis ping
 - `/metrics`: Prometheus形式のHTTP・録音ジョブメトリクス

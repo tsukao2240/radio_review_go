@@ -63,6 +63,20 @@ func TestPushServiceSendToUserSuccess(t *testing.T) {
 	}
 }
 
+func TestPushServiceDisabled(t *testing.T) {
+	repo := &fakePushRepo{subscriptions: []model.PushSubscription{testPushSubscription()}}
+	svc := &PushService{repo: repo}
+	if svc.Enabled() {
+		t.Fatal("Enabled = true, want false")
+	}
+	if err := svc.Subscribe(7, "https://push.example/sub", "p", "a", nil); err == nil {
+		t.Fatal("expected Subscribe error when disabled")
+	}
+	if err := svc.SendToUser(context.Background(), 7, PushPayload{Title: "録音完了"}); err != nil {
+		t.Fatalf("SendToUser disabled: %v", err)
+	}
+}
+
 func TestPushServiceSendToUserDeletesGoneSubscription(t *testing.T) {
 	sub := testPushSubscription()
 	repo := &fakePushRepo{subscriptions: []model.PushSubscription{sub}}
