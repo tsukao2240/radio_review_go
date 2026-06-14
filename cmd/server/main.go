@@ -24,6 +24,7 @@ import (
 	"github.com/tsukao2240/radio_review_go/internal/job"
 	appmetrics "github.com/tsukao2240/radio_review_go/internal/metrics"
 	appmiddleware "github.com/tsukao2240/radio_review_go/internal/middleware"
+	"github.com/tsukao2240/radio_review_go/internal/migration"
 	"github.com/tsukao2240/radio_review_go/internal/model"
 	"github.com/tsukao2240/radio_review_go/internal/repository"
 	"github.com/tsukao2240/radio_review_go/internal/service"
@@ -45,6 +46,9 @@ func main() {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(25)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	if err := migration.Run(ctx, db); err != nil {
+		fatal("database migration failed", err)
+	}
 
 	// --- Redis ---
 	rdb := mustConnectRedis()

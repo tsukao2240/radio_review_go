@@ -252,6 +252,9 @@ func TestIsRecordingFilePathAllowed(t *testing.T) {
 	if !isRecordingFilePathAllowed(dir, filepath.Join(dir, "ok.aac")) {
 		t.Fatal("expected in-storage aac path to be allowed")
 	}
+	if !isRecordingFilePathAllowed(dir, filepath.Join(dir, "ok.m4a")) {
+		t.Fatal("expected in-storage m4a path to be allowed")
+	}
 	if isRecordingFilePathAllowed(dir, filepath.Join(dir, "bad.txt")) {
 		t.Fatal("expected non-aac path to be rejected")
 	}
