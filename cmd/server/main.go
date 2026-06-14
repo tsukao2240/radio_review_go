@@ -254,6 +254,7 @@ func main() {
 	// 録音予約（認証必須）
 	r.Group(func(r chi.Router) {
 		r.Use(appmiddleware.RequireAuth(store))
+		r.Get("/recording/feed.xml", recordingHandler.FeedXML)
 		r.Get("/recording/schedules", scheduleHandler.Index)
 		r.Post("/recording/schedule", scheduleHandler.Store)
 		r.Post("/recording/schedule/cancel", scheduleHandler.Cancel)

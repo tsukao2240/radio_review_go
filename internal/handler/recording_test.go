@@ -722,6 +722,71 @@ func TestListRecordings_WithRecordings(t *testing.T) {
 	}
 }
 
+func TestFeedXML(t *testing.T) {
+	dir := t.TempDir()
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+
+	filePath := filepath.Join(dir, "2026-06-05_0100_TBS_Jazz Show.aac")
+	if err := os.WriteFile(filePath, []byte("audio-data"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	records := []model.RecordingInfo{
+		{
+			RecordingID: "feed_ok",
+			OwnerKey:    "user_1",
+			Status:      "completed",
+			FilePath:    filePath,
+			ProgramName: "Jazz Show",
+			StationID:   "TBS",
+			StartTime:   "20260605010000",
+		},
+		{
+			RecordingID: "other_user",
+			OwnerKey:    "user_2",
+			Status:      "completed",
+			FilePath:    filePath,
+			ProgramName: "Other Show",
+		},
+		{
+			RecordingID: "not_done",
+			OwnerKey:    "user_1",
+			Status:      "recording",
+			FilePath:    filePath,
+			ProgramName: "Recording Show",
+		},
+	}
+	for _, record := range records {
+		data, _ := json.Marshal(record)
+		if err := rdb.Set(context.Background(), "recording_"+record.RecordingID, string(data), 0).Err(); err != nil {
+			t.Fatalf("redis Set: %v", err)
+		}
+	}
+
+	req := withUserID(httptest.NewRequest(http.MethodGet, "/recording/feed.xml", nil), 1)
+	req.Host = "radio.example"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rr := httptest.NewRecorder()
+	h.FeedXML(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "<title>Jazz Show</title>") {
+		t.Fatalf("feed missing item: %s", body)
+	}
+	if strings.Contains(body, "Other Show") || strings.Contains(body, "Recording Show") {
+		t.Fatalf("feed contains non-owner or incomplete item: %s", body)
+	}
+	if !strings.Contains(body, `url="https://radio.example/recording/download?recording_id=feed_ok"`) {
+		t.Fatalf("feed missing enclosure URL: %s", body)
+	}
+	if !strings.Contains(body, `length="10"`) || !strings.Contains(body, `type="audio/aac"`) {
+		t.Fatalf("feed missing enclosure metadata: %s", body)
+	}
+}
+
 func TestListRecordings_Empty(t *testing.T) {
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
