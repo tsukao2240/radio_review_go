@@ -15,6 +15,15 @@ codex の状態報告は非権威として扱う。codex は既定で別ディ�
 
 役割分担: 実装は codex。claude は依頼文の作成・検証（gofmt/go vet/golangci-lint/go test）・コミットを担当する。codex は実装してもコミットしない傾向があるため、コミットは claude が行う（git 操作は claude 担当。コード修正は claude が行わない）。
 
+### 共有作業ディレクトリでの競合防止（重要）
+
+codex と claude は同一の作業ディレクトリ（`/Users/takafumiotsuka/project/radio_review_go`）を共有するため、同一ファイルを同時に編集すると競合・巻き戻しが起きる。実際に、codex が claude の修正を逆方向に書き換え、claude のコミット内容を巻き戻す事故が発生した。
+
+- 同一ファイルに対する claude と codex の同時編集を避ける。claude が編集・コミット中のファイル／ブランチは codex に触らせない。必要なら codex へ明示的に作業停止を指示する。
+- codex の編集後は、claude が `git show HEAD:<file>` 等で「コミットされた実体」を必ず確認する（codex の完了報告や working tree の見た目を信用しない）。
+- codex が指示と逆／誤った変更をした場合は、文面で往復せず claude が直接修正・コミットして確定する。
+- 恒久的には codex を別 git worktree に分離する運用が望ましい。
+
 ## 動作指針 (Filesystem First)
 
 回答を生成する前に、必ず以下のステップを遵守してください。これにより、不要な推測を排除し、トークン消費を最小限に抑えます。
