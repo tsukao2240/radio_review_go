@@ -26,7 +26,7 @@ func FinalizeAAC(ctx context.Context, info *model.RecordingInfo, inputAACPath st
 	tmp := info.FilePath + ".tagging.tmp.m4a"
 	args := []string{
 		"-y",
-		"-f", "adts",
+		"-f", "aac",
 		"-i", inputAACPath,
 		"-c", "copy",
 		"-metadata", "title=" + info.ProgramName,
