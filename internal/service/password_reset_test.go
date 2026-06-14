@@ -57,6 +57,7 @@ func (r *stubUserRepo) FindByEmail(email string) (*model.User, error) {
 	}
 	return nil, nil
 }
+func (r *stubUserRepo) FindByFeedToken(token string) (*model.User, error) { return nil, nil }
 func (r *stubUserRepo) Create(user *model.User) (int64, error) {
 	if r.createFunc != nil {
 		return r.createFunc(user)
