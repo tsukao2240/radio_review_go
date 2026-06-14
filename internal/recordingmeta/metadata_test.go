@@ -12,7 +12,7 @@ import (
 	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
-func TestFinalizeAACUsesADTSDemuxer(t *testing.T) {
+func TestFinalizeAACUsesAACDemuxer(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 	if err := os.Mkdir(binDir, 0700); err != nil {
@@ -55,8 +55,8 @@ printf 'm4a' > "$out"
 		t.Fatal(err)
 	}
 	args := strings.Split(strings.TrimSpace(string(rawArgs)), "\n")
-	if len(args) < 3 || args[1] != "-f" || args[2] != "adts" {
-		t.Fatalf("ffmpeg args = %#v, want -f adts before input", args)
+	if len(args) < 3 || args[1] != "-f" || args[2] != "aac" {
+		t.Fatalf("ffmpeg args = %#v, want -f aac before input", args)
 	}
 	if _, err := os.Stat(inputPath); !os.IsNotExist(err) {
 		t.Fatalf("input file still exists or unexpected stat error: %v", err)
