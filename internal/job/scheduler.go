@@ -732,8 +732,9 @@ func findPendingBefore(db *sqlx.DB, t string) ([]model.RecordingSchedule, error)
 	err := db.Select(&schedules,
 		`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_start_time <= ?
+		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`,
-		t,
+		t, t,
 	)
 	if err != nil {
 		return nil, err
@@ -753,7 +754,8 @@ func updateScheduleStatus(db *sqlx.DB, id int64, status string, errMsg *string) 
 func incrementScheduleRetryCount(db *sqlx.DB, id int64, errMsg *string) error {
 	_, err := db.Exec(
 		`UPDATE recording_schedules
-		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?, updated_at = NOW()
+		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?,
+		     next_retry_at = DATE_ADD(NOW(), INTERVAL 60 SECOND), updated_at = NOW()
 		 WHERE id = ?`,
 		errMsg, id,
 	)

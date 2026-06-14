@@ -115,6 +115,7 @@ func main() {
 	mypageHandler := handler.NewMypageHandler(postSvc, store)
 	favHandler := handler.NewFavoriteHandler(favSvc, radikoSvc, store)
 	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
+	recordingHandler.SetUserRepository(userRepo)
 	favHandler.SetRecorder(recordingHandler)
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
 	pushHandler := handler.NewPushHandler(pushSvc)
@@ -247,6 +248,7 @@ func main() {
 	r.Get("/recording/status", recordingHandler.GetRecordingStatus(store))
 	r.Get("/recording/stream", recordingHandler.StreamRecording(store))
 	r.Get("/recording/download", recordingHandler.DownloadRecording(store))
+	r.Get("/recording/feed.xml", recordingHandler.FeedXML)
 	r.Get("/recording/list", recordingHandler.ListRecordings(store))
 	r.Get("/recording/history", recordingHandler.ShowHistory(store))
 	r.Post("/recording/delete", recordingHandler.DeleteRecording(store))
@@ -254,7 +256,6 @@ func main() {
 	// 録音予約（認証必須）
 	r.Group(func(r chi.Router) {
 		r.Use(appmiddleware.RequireAuth(store))
-		r.Get("/recording/feed.xml", recordingHandler.FeedXML)
 		r.Get("/recording/schedules", scheduleHandler.Index)
 		r.Post("/recording/schedule", scheduleHandler.Store)
 		r.Post("/recording/schedule/cancel", scheduleHandler.Cancel)

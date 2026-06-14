@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -33,10 +35,26 @@ func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 	return &u, nil
 }
 
+func (r *UserRepository) FindByFeedToken(token string) (*model.User, error) {
+	var u model.User
+	err := r.db.Get(&u, "SELECT * FROM users WHERE feed_token = ? LIMIT 1", token)
+	if err != nil {
+		return nil, fmt.Errorf("repository.UserRepository.FindByFeedToken: %w", err)
+	}
+	return &u, nil
+}
+
 func (r *UserRepository) Create(user *model.User) (int64, error) {
+	if user.FeedToken == "" {
+		token, err := newFeedToken()
+		if err != nil {
+			return 0, fmt.Errorf("repository.UserRepository.Create feed token: %w", err)
+		}
+		user.FeedToken = token
+	}
 	res, err := r.db.NamedExec(
-		`INSERT INTO users (name, email, email_verified_at, password, remember_token, created_at, updated_at)
-		 VALUES (:name, :email, :email_verified_at, :password, :remember_token, NOW(), NOW())`,
+		`INSERT INTO users (name, email, email_verified_at, password, remember_token, feed_token, created_at, updated_at)
+		 VALUES (:name, :email, :email_verified_at, :password, :remember_token, :feed_token, NOW(), NOW())`,
 		user,
 	)
 	if err != nil {
@@ -59,4 +77,12 @@ func (r *UserRepository) Update(user *model.User) error {
 		return fmt.Errorf("repository.UserRepository.Update: %w", err)
 	}
 	return nil
+}
+
+func newFeedToken() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }

@@ -17,6 +17,7 @@ type User struct {
 	EmailVerifiedAt *time.Time `db:"email_verified_at"`
 	Password        string     `db:"password"`
 	RememberToken   *string    `db:"remember_token"`
+	FeedToken       string     `db:"feed_token"`
 	CreatedAt       time.Time  `db:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at"`
 }
@@ -66,21 +67,22 @@ type FavoriteProgram struct {
 
 // RecordingSchedule - recording_schedules テーブル
 type RecordingSchedule struct {
-	ID                 int64     `db:"id"`
-	UserID             int64     `db:"user_id"`
-	StationID          string    `db:"station_id"`
-	ProgramTitle       string    `db:"program_title"`
-	ScheduledStartTime time.Time `db:"scheduled_start_time"`
-	ScheduledEndTime   time.Time `db:"scheduled_end_time"`
-	Status             string    `db:"status"` // pending/recording/completed/failed/cancelled
-	RecordingID        *string   `db:"recording_id"`
-	ErrorMessage       *string   `db:"error_message"`
-	RetryCount         int       `db:"retry_count"`
-	IsRecurring        bool      `db:"is_recurring"`       // 定期録音フラグ
-	RecurrenceType     *string   `db:"recurrence_type"`    // "weekly" など
-	ParentScheduleID   *int64    `db:"parent_schedule_id"` // 前回スケジュールのID
-	CreatedAt          time.Time `db:"created_at"`
-	UpdatedAt          time.Time `db:"updated_at"`
+	ID                 int64      `db:"id"`
+	UserID             int64      `db:"user_id"`
+	StationID          string     `db:"station_id"`
+	ProgramTitle       string     `db:"program_title"`
+	ScheduledStartTime time.Time  `db:"scheduled_start_time"`
+	ScheduledEndTime   time.Time  `db:"scheduled_end_time"`
+	Status             string     `db:"status"` // pending/recording/completed/failed/cancelled
+	RecordingID        *string    `db:"recording_id"`
+	ErrorMessage       *string    `db:"error_message"`
+	RetryCount         int        `db:"retry_count"`
+	NextRetryAt        *time.Time `db:"next_retry_at"`
+	IsRecurring        bool       `db:"is_recurring"`       // 定期録音フラグ
+	RecurrenceType     *string    `db:"recurrence_type"`    // "weekly" など
+	ParentScheduleID   *int64     `db:"parent_schedule_id"` // 前回スケジュールのID
+	CreatedAt          time.Time  `db:"created_at"`
+	UpdatedAt          time.Time  `db:"updated_at"`
 }
 
 // PostTag - post_tags テーブル

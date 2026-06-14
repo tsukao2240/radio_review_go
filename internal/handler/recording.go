@@ -22,6 +22,7 @@ import (
 	"github.com/tsukao2240/radio_review_go/internal/model"
 	"github.com/tsukao2240/radio_review_go/internal/recordingfile"
 	"github.com/tsukao2240/radio_review_go/internal/recordingmeta"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
@@ -31,6 +32,7 @@ type RecordingHandler struct {
 	hlsDownloader radiko.HLSDownloaderInterface
 	redisClient   *redis.Client
 	storagePath   string
+	userRepo      repository.UserRepositoryInterface
 }
 
 type recordingRSS struct {
@@ -77,6 +79,10 @@ func NewRecordingHandler(
 	}
 }
 
+func (h *RecordingHandler) SetUserRepository(userRepo repository.UserRepositoryInterface) {
+	h.userRepo = userRepo
+}
+
 // ownerKey はリクエストからオーナーキーを生成する。
 // ログイン済みなら "user_{id}"、ゲストならセッションに保存したUUIDベースの "session_{guestID}"。
 func (h *RecordingHandler) ownerKey(r *http.Request, w http.ResponseWriter, store sessions.Store) (string, error) {
@@ -99,6 +105,32 @@ func (h *RecordingHandler) ownerKey(r *http.Request, w http.ResponseWriter, stor
 		}
 	}
 	return fmt.Sprintf("session_%s", guestID), nil
+}
+
+func (h *RecordingHandler) ownerKeyForRecordingAccess(r *http.Request, w http.ResponseWriter, store sessions.Store) (string, error) {
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		return h.ownerKeyFromFeedToken(token)
+	}
+	return h.ownerKey(r, w, store)
+}
+
+func (h *RecordingHandler) ownerKeyFromFeedToken(token string) (string, error) {
+	if h.userRepo == nil {
+		return "", fmt.Errorf("feed token lookup is not configured")
+	}
+	user, err := h.userRepo.FindByFeedToken(token)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("user_%d", user.ID), nil
+}
+
+func writeRecordingAccessError(w http.ResponseWriter, r *http.Request) {
+	if strings.TrimSpace(r.URL.Query().Get("token")) != "" {
+		writeError(w, http.StatusUnauthorized, "token が不正です")
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
 }
 
 func newGuestOwnerID() string {
@@ -335,9 +367,9 @@ func (h *RecordingHandler) GetRecordingStatus(store sessions.Store) http.Handler
 			return
 		}
 
-		ownerKey, err := h.ownerKey(r, w, store)
+		ownerKey, err := h.ownerKeyForRecordingAccess(r, w, store)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			writeRecordingAccessError(w, r)
 			return
 		}
 		if info.OwnerKey != ownerKey {
@@ -365,9 +397,9 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 			return
 		}
 
-		ownerKey, err := h.ownerKey(r, w, store)
+		ownerKey, err := h.ownerKeyForRecordingAccess(r, w, store)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			writeRecordingAccessError(w, r)
 			return
 		}
 		if info.OwnerKey != ownerKey {
@@ -515,12 +547,16 @@ func (h *RecordingHandler) ListRecordings(store sessions.Store) http.HandlerFunc
 }
 
 func (h *RecordingHandler) FeedXML(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetUserID(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "認証が必要です")
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "token が必要です")
 		return
 	}
-	ownerKey := fmt.Sprintf("user_%d", userID)
+	ownerKey, err := h.ownerKeyFromFeedToken(token)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "token が不正です")
+		return
+	}
 	recordings, err := h.listOwnerRecordings(r.Context(), ownerKey)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "録音一覧の取得に失敗しました: "+err.Error())
@@ -545,7 +581,7 @@ func (h *RecordingHandler) FeedXML(w http.ResponseWriter, r *http.Request) {
 			GUID:    info.RecordingID,
 			PubDate: recordingPubDate(info),
 			Enclosure: recordingRSSEnclosure{
-				URL:    recordingURL(r, info.RecordingID),
+				URL:    recordingURL(r, info.RecordingID, token),
 				Length: stat.Size(),
 				Type:   "audio/aac",
 			},
@@ -571,9 +607,10 @@ func (h *RecordingHandler) FeedXML(w http.ResponseWriter, r *http.Request) {
 	_ = xml.NewEncoder(w).Encode(feed)
 }
 
-func recordingURL(r *http.Request, recordingID string) string {
+func recordingURL(r *http.Request, recordingID, token string) string {
 	q := url.Values{}
 	q.Set("recording_id", recordingID)
+	q.Set("token", token)
 	return requestBaseURL(r) + "/recording/download?" + q.Encode()
 }
 
@@ -586,7 +623,11 @@ func requestBaseURL(r *http.Request) string {
 			scheme = "http"
 		}
 	}
-	return scheme + "://" + r.Host
+	host := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+	if host == "" {
+		host = r.Host
+	}
+	return scheme + "://" + host
 }
 
 func recordingPubDate(info model.RecordingInfo) string {

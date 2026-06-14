@@ -25,9 +25,9 @@ func recordingScheduleRows() *sqlmock.Rows {
 	now := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
 	return sqlmock.NewRows([]string{
 		"id", "user_id", "station_id", "program_title", "scheduled_start_time", "scheduled_end_time",
-		"status", "recording_id", "error_message", "retry_count", "is_recurring", "recurrence_type", "parent_schedule_id",
+		"status", "recording_id", "error_message", "retry_count", "next_retry_at", "is_recurring", "recurrence_type", "parent_schedule_id",
 		"created_at", "updated_at",
-	}).AddRow(int64(3), int64(2), "TBS", "morning show", now, now.Add(time.Hour), "pending", nil, nil, 0, false, nil, nil, now, now)
+	}).AddRow(int64(3), int64(2), "TBS", "morning show", now, now.Add(time.Hour), "pending", nil, nil, 0, nil, false, nil, nil, now, now)
 }
 
 func TestRecordingScheduleRepositoryFindByUser(t *testing.T) {
@@ -77,8 +77,9 @@ func TestRecordingScheduleRepositoryFindPendingBefore(t *testing.T) {
 	before := "2026-06-09 12:00:00"
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_start_time <= ?
+		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`)).
-		WithArgs(before).
+		WithArgs(before, before).
 		WillReturnRows(recordingScheduleRows())
 
 	got, err := repo.FindPendingBefore(before)
@@ -138,7 +139,8 @@ func TestRecordingScheduleRepositoryMutations(t *testing.T) {
 		WithArgs("failed", &msg, int64(3)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(`UPDATE recording_schedules
-		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?, updated_at = NOW()
+		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?,
+		     next_retry_at = DATE_ADD(NOW(), INTERVAL 60 SECOND), updated_at = NOW()
 		 WHERE id = ?`)).
 		WithArgs(&msg, int64(3)).
 		WillReturnResult(sqlmock.NewResult(0, 1))

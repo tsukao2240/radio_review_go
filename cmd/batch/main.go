@@ -75,10 +75,14 @@ func newRedisClient() *redis.Client {
 
 func runRenameRecordings(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("rename-recordings", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "変更内容を表示するだけでリネームしない")
+	dryRun := fs.Bool("dry-run", true, "変更内容を表示するだけでリネームしない")
+	execute := fs.Bool("execute", false, "実際にファイル名とRedisメタを更新する")
 	storagePath := fs.String("storage-path", getEnv("RECORDING_STORAGE_PATH", "storage/recordings"), "録音ファイル保存ディレクトリ")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *execute {
+		*dryRun = false
 	}
 
 	rdb := newRedisClient()
@@ -104,7 +108,7 @@ func renameRecordings(ctx context.Context, rdb *redis.Client, storagePath string
 	var result renameRecordingsResult
 	var cursor uint64
 	for {
-		keys, nextCursor, err := rdb.Scan(ctx, cursor, "recording_*", 100).Result()
+		keys, nextCursor, err := rdb.Scan(ctx, cursor, "recording_*", 500).Result()
 		if err != nil {
 			return result, fmt.Errorf("redis Scan: %w", err)
 		}

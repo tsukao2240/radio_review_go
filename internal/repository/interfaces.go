@@ -10,6 +10,7 @@ import (
 type UserRepositoryInterface interface {
 	FindByID(id int64) (*model.User, error)
 	FindByEmail(email string) (*model.User, error)
+	FindByFeedToken(token string) (*model.User, error)
 	Create(user *model.User) (int64, error)
 	Update(user *model.User) error
 }
