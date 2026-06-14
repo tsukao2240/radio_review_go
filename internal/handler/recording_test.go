@@ -17,6 +17,7 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/redis/go-redis/v9"
 	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/recordingfile"
 	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
@@ -296,7 +297,7 @@ func TestStartTimefree_CoreStoresOwnerAndStartsDownload(t *testing.T) {
 	if info.OwnerKey != "user_9" || info.ProgramName != "Core Show" || info.Status != "recording" {
 		t.Fatalf("stored info = %#v", info)
 	}
-	if !strings.Contains(filepath.Base(info.FilePath), "2024-01-01_1000_OBC_Core Show.aac") {
+	if !strings.Contains(filepath.Base(info.FilePath), "2024-01-01_1000_OBC_Core Show.m4a") {
 		t.Fatalf("file path = %q", info.FilePath)
 	}
 
@@ -305,8 +306,9 @@ func TestStartTimefree_CoreStoresOwnerAndStartsDownload(t *testing.T) {
 		if got["authToken"] != "core-token" || got["areaID"] != "JP27" || got["stationID"] != "OBC" {
 			t.Fatalf("download args = %#v", got)
 		}
-		if got["outputPath"] != info.FilePath {
-			t.Fatalf("output path = %q, want %q", got["outputPath"], info.FilePath)
+		wantOutputPath := recordingfile.TempAACPath(info.FilePath)
+		if got["outputPath"] != wantOutputPath {
+			t.Fatalf("output path = %q, want %q", got["outputPath"], wantOutputPath)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for download")

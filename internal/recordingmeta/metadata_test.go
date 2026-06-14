@@ -9,28 +9,37 @@ import (
 	"github.com/tsukao2240/radio_review_go/internal/model"
 )
 
-func TestTagAACSkipsWhenFFmpegUnavailable(t *testing.T) {
+func TestFinalizeAACFallsBackWhenFFmpegUnavailable(t *testing.T) {
 	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty"))
 
-	filePath := filepath.Join(t.TempDir(), "recording.aac")
-	if err := os.WriteFile(filePath, []byte("aac"), 0600); err != nil {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "recording.m4a.download.aac")
+	finalPath := filepath.Join(dir, "recording.m4a")
+	if err := os.WriteFile(inputPath, []byte("aac"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err := TagAAC(context.Background(), &model.RecordingInfo{
-		FilePath:    filePath,
+	info := &model.RecordingInfo{
+		FilePath:    finalPath,
 		ProgramName: "Show",
 		StationID:   "TBS",
 		StartTime:   "20260605010000",
-	})
-	if err != nil {
-		t.Fatalf("TagAAC: %v", err)
 	}
-	got, err := os.ReadFile(filePath)
+	err := FinalizeAAC(context.Background(), info, inputPath)
+	if err != nil {
+		t.Fatalf("FinalizeAAC: %v", err)
+	}
+	if info.FilePath != filepath.Join(dir, "recording.aac") {
+		t.Fatalf("FilePath = %q", info.FilePath)
+	}
+	got, err := os.ReadFile(info.FilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != "aac" {
 		t.Fatalf("file changed: %q", got)
+	}
+	if _, err := os.Stat(inputPath); !os.IsNotExist(err) {
+		t.Fatalf("input file still exists or unexpected stat error: %v", err)
 	}
 }
 

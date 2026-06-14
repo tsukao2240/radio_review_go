@@ -8,19 +8,26 @@ import (
 	"strings"
 
 	"github.com/tsukao2240/radio_review_go/internal/model"
+	"github.com/tsukao2240/radio_review_go/internal/recordingfile"
 )
 
-func TagAAC(ctx context.Context, info *model.RecordingInfo) error {
-	if info == nil || info.FilePath == "" {
+func FinalizeAAC(ctx context.Context, info *model.RecordingInfo, inputAACPath string) error {
+	if info == nil || info.FilePath == "" || inputAACPath == "" {
 		return nil
 	}
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		fallbackPath := recordingfile.FallbackAACPath(info.FilePath)
+		if err := os.Rename(inputAACPath, fallbackPath); err != nil {
+			return fmt.Errorf("fallback aac rename failed: %w", err)
+		}
+		info.FilePath = fallbackPath
 		return nil
 	}
-	tmp := info.FilePath + ".tagging.tmp"
+	tmp := info.FilePath + ".tagging.tmp.m4a"
 	args := []string{
 		"-y",
-		"-i", info.FilePath,
+		"-f", "adts",
+		"-i", inputAACPath,
 		"-c", "copy",
 		"-metadata", "title=" + info.ProgramName,
 		"-metadata", "artist=" + info.StationID,
@@ -33,12 +40,13 @@ func TagAAC(ctx context.Context, info *model.RecordingInfo) error {
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...) //nolint:gosec // args are not evaluated by a shell.
 	if output, err := cmd.CombinedOutput(); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("ffmpeg metadata copy failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("ffmpeg m4a remux failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	if err := os.Rename(tmp, info.FilePath); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("replace tagged recording: %w", err)
+		return fmt.Errorf("replace m4a recording: %w", err)
 	}
+	_ = os.Remove(inputAACPath)
 	return nil
 }
 

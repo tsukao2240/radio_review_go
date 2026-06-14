@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -35,7 +36,7 @@ func TestRenameRecordings(t *testing.T) {
 		StartTime:   "20260605010000",
 		FilePath:    oldPath,
 	}
-	newPath := recordingfile.NewPath(dir, info.RecordingID, info.StartTime, info.StationID, info.ProgramName)
+	newPath := strings.TrimSuffix(recordingfile.NewPath(dir, info.RecordingID, info.StartTime, info.StationID, info.ProgramName), ".m4a") + ".aac"
 	data, _ := json.Marshal(info)
 	if err := rdb.Set(context.Background(), "recording_rec123456789", string(data), 0).Err(); err != nil {
 		t.Fatalf("redis Set: %v", err)

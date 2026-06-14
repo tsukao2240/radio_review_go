@@ -147,7 +147,7 @@ async function recordingCacheResponse(request) {
     status: 206,
     statusText: 'Partial Content',
     headers: {
-      'Content-Type': cached.headers.get('Content-Type') || 'audio/aac',
+      'Content-Type': cached.headers.get('Content-Type') || 'audio/mp4',
       'Content-Length': String(sliced.byteLength),
       'Content-Range': `bytes ${start}-${end}/${buffer.byteLength}`,
       'Accept-Ranges': 'bytes'
