@@ -220,7 +220,8 @@ func (h *RecordingHandler) StartTimefree(ctx context.Context, ownerKey, stationI
 			log.Printf("StartTimefree: mkdir storage failed recording_id=%s path=%s: %v", recordingID, h.storagePath, err)
 		}
 
-		dlErr := h.hlsDownloader.DownloadTimefree(bgCtx, authToken, stationID, startTime, endTime, areaID, filePath)
+		downloadPath := recordingfile.TempAACPath(filePath)
+		dlErr := h.hlsDownloader.DownloadTimefree(bgCtx, authToken, stationID, startTime, endTime, areaID, downloadPath)
 
 		updated, loadErr := h.loadRecordingInfo(bgCtx, recordingID)
 		if loadErr != nil {
@@ -235,11 +236,14 @@ func (h *RecordingHandler) StartTimefree(ctx context.Context, ownerKey, stationI
 			updated.FailReason = dlErr.Error()
 			log.Printf("StartTimefree: download failed recording_id=%s station_id=%s start=%s end=%s: %v", recordingID, stationID, startTime, endTime, dlErr)
 		} else {
-			if err := recordingmeta.TagAAC(bgCtx, updated); err != nil {
-				log.Printf("StartTimefree: metadata tagging skipped recording_id=%s: %v", recordingID, err)
+			if err := recordingmeta.FinalizeAAC(bgCtx, updated, downloadPath); err != nil {
+				updated.Status = "failed"
+				updated.FailReason = err.Error()
+				log.Printf("StartTimefree: finalize recording failed recording_id=%s: %v", recordingID, err)
+			} else {
+				updated.Status = "completed"
+				updated.FailReason = ""
 			}
-			updated.Status = "completed"
-			updated.FailReason = ""
 		}
 		if err := h.saveRecordingInfo(bgCtx, updated, 2*time.Hour); err != nil {
 			log.Printf("StartTimefree: save recording info failed recording_id=%s: %v", recordingID, err)
@@ -425,14 +429,14 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 		defer func() { _ = f.Close() }()
 
 		downloadName := recordingfile.DisplayName(info.FilePath, info.StartTime, info.StationID, info.ProgramName)
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Type", recordingfile.ContentType(info.FilePath))
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, downloadName))
 		http.ServeContent(w, r, downloadName, time.Time{}, f)
 	}
 }
 
 // StreamRecording は GET /recording/stream を処理する。
-// 録音ファイルを audio/aac で返し、Range リクエストによるシークを可能にする。
+// 録音ファイルを拡張子に応じたContent-Typeで返し、Range リクエストによるシークを可能にする。
 func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		recordingID := r.URL.Query().Get("recording_id")
@@ -480,7 +484,7 @@ func (h *RecordingHandler) StreamRecording(store sessions.Store) http.HandlerFun
 			return
 		}
 
-		w.Header().Set("Content-Type", "audio/aac")
+		w.Header().Set("Content-Type", recordingfile.ContentType(info.FilePath))
 		streamName := recordingfile.DisplayName(info.FilePath, info.StartTime, info.StationID, info.ProgramName)
 		http.ServeContent(w, r, streamName, stat.ModTime(), f)
 	}
@@ -583,7 +587,7 @@ func (h *RecordingHandler) FeedXML(w http.ResponseWriter, r *http.Request) {
 			Enclosure: recordingRSSEnclosure{
 				URL:    recordingURL(r, info.RecordingID, token),
 				Length: stat.Size(),
-				Type:   "audio/aac",
+				Type:   recordingfile.ContentType(info.FilePath),
 			},
 		})
 	}

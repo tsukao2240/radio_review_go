@@ -157,7 +157,7 @@ func renameRecording(ctx context.Context, rdb *redis.Client, storagePath, key st
 		log.Printf("rename-recordings: skip key=%s reason=file_missing path=%s", key, info.FilePath)
 		return false, nil
 	}
-	newPath := recordingfile.NewPath(storagePath, info.RecordingID, info.StartTime, info.StationID, info.ProgramName)
+	newPath := strings.TrimSuffix(recordingfile.NewPath(storagePath, info.RecordingID, info.StartTime, info.StationID, info.ProgramName), ".m4a") + ".aac"
 	if samePath(info.FilePath, newPath) {
 		return false, nil
 	}

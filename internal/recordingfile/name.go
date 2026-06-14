@@ -36,7 +36,7 @@ func BaseName(startTime, stationID, programName string) string {
 	if prefix == "" {
 		prefix = time.Now().Format("2006-01-02_1504")
 	}
-	return fmt.Sprintf("%s_%s_%s.aac", prefix, station, title)
+	return fmt.Sprintf("%s_%s_%s.m4a", prefix, station, title)
 }
 
 func DisplayName(infoFilePath, startTime, stationID, programName string) string {
@@ -44,6 +44,45 @@ func DisplayName(infoFilePath, startTime, stationID, programName string) string 
 		return filepath.Base(infoFilePath)
 	}
 	return BaseName(startTime, stationID, programName)
+}
+
+func ContentType(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".m4a", ".mp4":
+		return "audio/mp4"
+	case ".aac":
+		return "audio/aac"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func IsSupportedRecordingPath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".m4a", ".aac":
+		return true
+	default:
+		return false
+	}
+}
+
+func TempAACPath(finalPath string) string {
+	return finalPath + ".download.aac"
+}
+
+func FallbackAACPath(finalPath string) string {
+	ext := filepath.Ext(finalPath)
+	base := strings.TrimSuffix(finalPath, ext) + ".aac"
+	if _, err := os.Stat(base); os.IsNotExist(err) {
+		return base
+	}
+	stem := strings.TrimSuffix(base, ".aac")
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s_%d.aac", stem, i)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
 }
 
 func startPrefix(startTime string) string {

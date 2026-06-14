@@ -203,7 +203,7 @@ func (s *Scheduler) sweepOrphanRecordingFiles(ctx context.Context) {
 			slog.Error("[job] sweepOrphanRecordingFiles: walk failed", "path", path, "error", err)
 			return nil
 		}
-		if d.IsDir() || filepath.Ext(path) != ".aac" {
+		if d.IsDir() || !recordingfile.IsSupportedRecordingPath(path) {
 			return nil
 		}
 		if !isRecordingFilePathAllowed(s.storagePath, path) {
@@ -270,7 +270,7 @@ func (s *Scheduler) activeRecordingFiles(ctx context.Context) (map[string]bool, 
 }
 
 func isRecordingFilePathAllowed(storagePath, path string) bool {
-	if filepath.Ext(path) != ".aac" {
+	if !recordingfile.IsSupportedRecordingPath(path) {
 		return false
 	}
 	storageAbs, err := filepath.Abs(storagePath)
@@ -609,7 +609,8 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 	}
 
 	// HLS ダウンロード（タイムフリー録音）
-	if err := s.hlsDownloader.DownloadTimefree(ctx, authToken, sc.StationID, startFmt, endFmt, areaID, outputPath); err != nil {
+	downloadPath := recordingfile.TempAACPath(outputPath)
+	if err := s.hlsDownloader.DownloadTimefree(ctx, authToken, sc.StationID, startFmt, endFmt, areaID, downloadPath); err != nil {
 		errMsg := fmt.Sprintf("録音エラー: %v", err)
 		appmetrics.IncRecordingJobFailure("scheduled_recording", "download")
 		slog.Error("[job] startScheduledRecording: download failed", "id", sc.ID, "error", err)
@@ -618,8 +619,18 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		return
 	}
 
-	if err := recordingmeta.TagAAC(ctx, info); err != nil {
-		slog.Warn("[job] recording metadata tagging skipped", "id", sc.ID, "recording_id", recordingID, "error", err)
+	if err := recordingmeta.FinalizeAAC(ctx, info, downloadPath); err != nil {
+		errMsg := fmt.Sprintf("録音ファイル変換エラー: %v", err)
+		appmetrics.IncRecordingJobFailure("scheduled_recording", "finalize")
+		slog.Error("[job] startScheduledRecording: finalize failed", "id", sc.ID, "recording_id", recordingID, "error", err)
+		_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed", errMsg)
+		s.handleScheduledRecordingFailure(ctx, sc, recordingID, errMsg)
+		return
+	}
+	if info.FilePath != outputPath {
+		if err := saveRecordingInfo(ctx, s.redis, recordingID, info); err != nil {
+			slog.Error("[job] startScheduledRecording: Redis fallback path save failed", "id", sc.ID, "error", err)
+		}
 	}
 
 	// 完了処理
