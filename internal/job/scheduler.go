@@ -30,6 +30,8 @@ type recordingNotificationService interface {
 	CreateRecordingFailed(sc *model.RecordingSchedule, errMsg string) error
 }
 
+const maxScheduledRecordingRetries = 3
+
 // Scheduler は全バックグラウンドジョブを管理する。
 type Scheduler struct {
 	db                  *sqlx.DB
@@ -566,8 +568,7 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		errMsg := fmt.Sprintf("認証トークン取得エラー: %v", err)
 		appmetrics.IncRecordingJobFailure("scheduled_recording", "auth_token")
 		slog.Error("[job] startScheduledRecording: auth token failed", "id", sc.ID, "error", err)
-		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
-		s.notifyRecordingFailed(sc, errMsg)
+		s.handleScheduledRecordingFailure(ctx, sc, recordingID, errMsg)
 		return
 	}
 
@@ -580,8 +581,7 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		errMsg := fmt.Sprintf("保存ディレクトリ作成エラー: %v", err)
 		appmetrics.IncRecordingJobFailure("scheduled_recording", "mkdir")
 		slog.Error("[job] startScheduledRecording: mkdir failed", "id", sc.ID, "path", s.storagePath, "error", err)
-		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
-		s.notifyRecordingFailed(sc, errMsg)
+		s.handleScheduledRecordingFailure(ctx, sc, recordingID, errMsg)
 		return
 	}
 
@@ -613,9 +613,8 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 		errMsg := fmt.Sprintf("録音エラー: %v", err)
 		appmetrics.IncRecordingJobFailure("scheduled_recording", "download")
 		slog.Error("[job] startScheduledRecording: download failed", "id", sc.ID, "error", err)
-		_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
 		_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed", errMsg)
-		s.notifyRecordingFailed(sc, errMsg)
+		s.handleScheduledRecordingFailure(ctx, sc, recordingID, errMsg)
 		return
 	}
 
@@ -636,6 +635,27 @@ func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.Recor
 			slog.Error("[job] next recurring schedule creation failed", "id", sc.ID, "error", err)
 		}
 	}
+}
+
+func (s *Scheduler) handleScheduledRecordingFailure(ctx context.Context, sc *model.RecordingSchedule, recordingID, errMsg string) {
+	if sc.RetryCount < maxScheduledRecordingRetries {
+		if err := incrementScheduleRetryCount(s.db, sc.ID, &errMsg); err != nil {
+			slog.Error("[job] scheduled recording retry update failed", "id", sc.ID, "error", err)
+			_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
+			s.notifyRecordingFailed(sc, errMsg)
+			return
+		}
+		slog.Info("[job] scheduled recording queued for retry",
+			"id", sc.ID,
+			"recording_id", recordingID,
+			"retry_count", sc.RetryCount+1,
+			"max_retries", maxScheduledRecordingRetries,
+		)
+		return
+	}
+	_ = updateScheduleStatus(s.db, sc.ID, "failed", &errMsg)
+	_ = updateRedisRecordingStatus(ctx, s.redis, recordingID, "failed", errMsg)
+	s.notifyRecordingFailed(sc, errMsg)
 }
 
 // createNextRecurringSchedule は定期録音の次回スケジュールを DB に INSERT する。
@@ -712,8 +732,9 @@ func findPendingBefore(db *sqlx.DB, t string) ([]model.RecordingSchedule, error)
 	err := db.Select(&schedules,
 		`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_start_time <= ?
+		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`,
-		t,
+		t, t,
 	)
 	if err != nil {
 		return nil, err
@@ -726,6 +747,17 @@ func updateScheduleStatus(db *sqlx.DB, id int64, status string, errMsg *string) 
 	_, err := db.Exec(
 		"UPDATE recording_schedules SET status = ?, error_message = ?, updated_at = NOW() WHERE id = ?",
 		status, errMsg, id,
+	)
+	return err
+}
+
+func incrementScheduleRetryCount(db *sqlx.DB, id int64, errMsg *string) error {
+	_, err := db.Exec(
+		`UPDATE recording_schedules
+		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?,
+		     next_retry_at = DATE_ADD(NOW(), INTERVAL 60 SECOND), updated_at = NOW()
+		 WHERE id = ?`,
+		errMsg, id,
 	)
 	return err
 }

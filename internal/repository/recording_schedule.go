@@ -43,8 +43,9 @@ func (r *RecordingScheduleRepository) FindPendingBefore(t string) ([]model.Recor
 	err := r.db.Select(&schedules,
 		`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_start_time <= ?
+		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`,
-		t,
+		t, t,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("repository.RecordingScheduleRepository.FindPendingBefore: %w", err)
@@ -81,6 +82,20 @@ func (r *RecordingScheduleRepository) UpdateStatus(id int64, status string, errM
 	)
 	if err != nil {
 		return fmt.Errorf("repository.RecordingScheduleRepository.UpdateStatus: %w", err)
+	}
+	return nil
+}
+
+func (r *RecordingScheduleRepository) IncrementRetryCount(id int64, errMsg *string) error {
+	_, err := r.db.Exec(
+		`UPDATE recording_schedules
+		 SET retry_count = retry_count + 1, status = 'pending', error_message = ?,
+		     next_retry_at = DATE_ADD(NOW(), INTERVAL 60 SECOND), updated_at = NOW()
+		 WHERE id = ?`,
+		errMsg, id,
+	)
+	if err != nil {
+		return fmt.Errorf("repository.RecordingScheduleRepository.IncrementRetryCount: %w", err)
 	}
 	return nil
 }

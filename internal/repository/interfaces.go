@@ -10,6 +10,7 @@ import (
 type UserRepositoryInterface interface {
 	FindByID(id int64) (*model.User, error)
 	FindByEmail(email string) (*model.User, error)
+	FindByFeedToken(token string) (*model.User, error)
 	Create(user *model.User) (int64, error)
 	Update(user *model.User) error
 }
@@ -65,6 +66,7 @@ type RecordingScheduleRepositoryInterface interface {
 	FindPendingBefore(t string) ([]model.RecordingSchedule, error)
 	Create(s *model.RecordingSchedule) (int64, error)
 	UpdateStatus(id int64, status string, errMsg *string) error
+	IncrementRetryCount(id int64, errMsg *string) error
 	SetRecordingID(id int64, recordingID string) error
 	Cancel(id int64) error
 }

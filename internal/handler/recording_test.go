@@ -48,6 +48,21 @@ func (d *stubHLSDownloader) DownloadTimefree(ctx context.Context, authToken, sta
 
 var _ radiko.HLSDownloaderInterface = (*stubHLSDownloader)(nil)
 
+type stubRecordingUserRepo struct {
+	user *model.User
+	err  error
+}
+
+func (r *stubRecordingUserRepo) FindByID(id int64) (*model.User, error) { return r.user, r.err }
+func (r *stubRecordingUserRepo) FindByEmail(email string) (*model.User, error) {
+	return r.user, r.err
+}
+func (r *stubRecordingUserRepo) FindByFeedToken(token string) (*model.User, error) {
+	return r.user, r.err
+}
+func (r *stubRecordingUserRepo) Create(user *model.User) (int64, error) { return 0, r.err }
+func (r *stubRecordingUserRepo) Update(user *model.User) error          { return r.err }
+
 // newMiniRedis はテスト用の miniredis クライアントを返す。
 func newMiniRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	t.Helper()
@@ -670,6 +685,7 @@ func TestDownloadRecording_Success(t *testing.T) {
 	dir := t.TempDir()
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+	h.SetUserRepository(&stubRecordingUserRepo{user: &model.User{ID: 1, FeedToken: "feed-token"}})
 	store := sessions.NewCookieStore([]byte("test"))
 
 	// Create a real file to serve.
@@ -700,6 +716,38 @@ func TestDownloadRecording_Success(t *testing.T) {
 	}
 }
 
+func TestDownloadRecording_WithFeedToken(t *testing.T) {
+	dir := t.TempDir()
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+	h.SetUserRepository(&stubRecordingUserRepo{user: &model.User{ID: 1, FeedToken: "feed-token"}})
+
+	filePath := filepath.Join(dir, "2026-06-05_0100_TBS_Jazz Show.aac")
+	if err := os.WriteFile(filePath, []byte("audio-data"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	info := &model.RecordingInfo{
+		RecordingID: "token_dl",
+		OwnerKey:    "user_1",
+		Status:      "completed",
+		FilePath:    filePath,
+		ProgramName: "Jazz Show",
+	}
+	data, _ := json.Marshal(info)
+	if err := rdb.Set(context.Background(), "recording_token_dl", string(data), 0).Err(); err != nil {
+		t.Fatalf("redis Set: %v", err)
+	}
+
+	store := sessions.NewCookieStore([]byte("test"))
+	req := httptest.NewRequest(http.MethodGet, "/recording/download?recording_id=token_dl&token=feed-token", nil)
+	rr := httptest.NewRecorder()
+	h.DownloadRecording(store)(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+}
+
 func TestListRecordings_WithRecordings(t *testing.T) {
 	_, rdb := newMiniRedis(t)
 	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, t.TempDir())
@@ -719,6 +767,73 @@ func TestListRecordings_WithRecordings(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("got %d, want 200", rr.Code)
+	}
+}
+
+func TestFeedXML(t *testing.T) {
+	dir := t.TempDir()
+	_, rdb := newMiniRedis(t)
+	h := NewRecordingHandler(&stubRadikoClient{}, &stubHLSDownloader{}, rdb, dir)
+	h.SetUserRepository(&stubRecordingUserRepo{user: &model.User{ID: 1, FeedToken: "feed-token"}})
+
+	filePath := filepath.Join(dir, "2026-06-05_0100_TBS_Jazz Show.aac")
+	if err := os.WriteFile(filePath, []byte("audio-data"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	records := []model.RecordingInfo{
+		{
+			RecordingID: "feed_ok",
+			OwnerKey:    "user_1",
+			Status:      "completed",
+			FilePath:    filePath,
+			ProgramName: "Jazz Show",
+			StationID:   "TBS",
+			StartTime:   "20260605010000",
+		},
+		{
+			RecordingID: "other_user",
+			OwnerKey:    "user_2",
+			Status:      "completed",
+			FilePath:    filePath,
+			ProgramName: "Other Show",
+		},
+		{
+			RecordingID: "not_done",
+			OwnerKey:    "user_1",
+			Status:      "recording",
+			FilePath:    filePath,
+			ProgramName: "Recording Show",
+		},
+	}
+	for _, record := range records {
+		data, _ := json.Marshal(record)
+		if err := rdb.Set(context.Background(), "recording_"+record.RecordingID, string(data), 0).Err(); err != nil {
+			t.Fatalf("redis Set: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/recording/feed.xml?token=feed-token", nil)
+	req.Host = "radio.example"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "public.example")
+	rr := httptest.NewRecorder()
+	h.FeedXML(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "<title>Jazz Show</title>") {
+		t.Fatalf("feed missing item: %s", body)
+	}
+	if strings.Contains(body, "Other Show") || strings.Contains(body, "Recording Show") {
+		t.Fatalf("feed contains non-owner or incomplete item: %s", body)
+	}
+	if !strings.Contains(body, `url="https://public.example/recording/download?recording_id=feed_ok&amp;token=feed-token"`) {
+		t.Fatalf("feed missing enclosure URL: %s", body)
+	}
+	if !strings.Contains(body, `length="10"`) || !strings.Contains(body, `type="audio/aac"`) {
+		t.Fatalf("feed missing enclosure metadata: %s", body)
 	}
 }
 

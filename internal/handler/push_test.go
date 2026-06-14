@@ -58,7 +58,7 @@ func TestPushHandlerVAPIDPublicKey(t *testing.T) {
 }
 
 func TestPushHandlerSubscribe(t *testing.T) {
-	svc := &fakePushService{}
+	svc := &fakePushService{enabled: true}
 	h := NewPushHandler(svc)
 	body := []byte(`{"endpoint":"https://push.example/sub","keys":{"p256dh":"p","auth":"a"}}`)
 	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/push/subscribe", bytes.NewReader(body)), 7)
@@ -71,6 +71,23 @@ func TestPushHandlerSubscribe(t *testing.T) {
 	}
 	if svc.subscribed.userID != 7 || svc.subscribed.endpoint != "https://push.example/sub" || svc.subscribed.p256dh != "p" || svc.subscribed.auth != "a" {
 		t.Fatalf("subscribed = %#v", svc.subscribed)
+	}
+}
+
+func TestPushHandlerSubscribeDisabled(t *testing.T) {
+	svc := &fakePushService{enabled: false}
+	h := NewPushHandler(svc)
+	body := []byte(`{"endpoint":"https://push.example/sub","keys":{"p256dh":"p","auth":"a"}}`)
+	req := withUserID(httptest.NewRequest(http.MethodPost, "/api/push/subscribe", bytes.NewReader(body)), 7)
+	rr := httptest.NewRecorder()
+
+	h.Subscribe(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	if svc.subscribed.userID != 0 {
+		t.Fatalf("subscribe should not be called: %#v", svc.subscribed)
 	}
 }
 

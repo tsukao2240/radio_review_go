@@ -50,6 +50,9 @@ func (s *PushService) Enabled() bool {
 }
 
 func (s *PushService) Subscribe(userID int64, endpoint, p256dh, auth string, userAgent *string) error {
+	if !s.Enabled() {
+		return fmt.Errorf("web push is disabled")
+	}
 	if endpoint == "" || p256dh == "" || auth == "" {
 		return fmt.Errorf("endpoint, p256dh, auth are required")
 	}

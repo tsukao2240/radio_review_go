@@ -29,6 +29,10 @@ func (h *PushHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "認証が必要です")
 		return
 	}
+	if !h.service.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "Web Push は無効です")
+		return
+	}
 	var req struct {
 		Endpoint string `json:"endpoint"`
 		Keys     struct {

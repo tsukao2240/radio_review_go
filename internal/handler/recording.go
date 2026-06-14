@@ -5,11 +5,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/tsukao2240/radio_review_go/internal/model"
 	"github.com/tsukao2240/radio_review_go/internal/recordingfile"
 	"github.com/tsukao2240/radio_review_go/internal/recordingmeta"
+	"github.com/tsukao2240/radio_review_go/internal/repository"
 	"github.com/tsukao2240/radio_review_go/pkg/radiko"
 )
 
@@ -28,6 +32,36 @@ type RecordingHandler struct {
 	hlsDownloader radiko.HLSDownloaderInterface
 	redisClient   *redis.Client
 	storagePath   string
+	userRepo      repository.UserRepositoryInterface
+}
+
+type recordingRSS struct {
+	XMLName     xml.Name            `xml:"rss"`
+	Version     string              `xml:"version,attr"`
+	XMLNSItunes string              `xml:"xmlns:itunes,attr"`
+	Channel     recordingRSSChannel `xml:"channel"`
+}
+
+type recordingRSSChannel struct {
+	Title        string             `xml:"title"`
+	Link         string             `xml:"link"`
+	Description  string             `xml:"description"`
+	Language     string             `xml:"language"`
+	ItunesAuthor string             `xml:"itunes:author,omitempty"`
+	Items        []recordingRSSItem `xml:"item"`
+}
+
+type recordingRSSItem struct {
+	Title     string                `xml:"title"`
+	GUID      string                `xml:"guid"`
+	PubDate   string                `xml:"pubDate"`
+	Enclosure recordingRSSEnclosure `xml:"enclosure"`
+}
+
+type recordingRSSEnclosure struct {
+	URL    string `xml:"url,attr"`
+	Length int64  `xml:"length,attr"`
+	Type   string `xml:"type,attr"`
 }
 
 // NewRecordingHandler は新しい RecordingHandler を返す。
@@ -43,6 +77,10 @@ func NewRecordingHandler(
 		redisClient:   redisClient,
 		storagePath:   storagePath,
 	}
+}
+
+func (h *RecordingHandler) SetUserRepository(userRepo repository.UserRepositoryInterface) {
+	h.userRepo = userRepo
 }
 
 // ownerKey はリクエストからオーナーキーを生成する。
@@ -67,6 +105,32 @@ func (h *RecordingHandler) ownerKey(r *http.Request, w http.ResponseWriter, stor
 		}
 	}
 	return fmt.Sprintf("session_%s", guestID), nil
+}
+
+func (h *RecordingHandler) ownerKeyForRecordingAccess(r *http.Request, w http.ResponseWriter, store sessions.Store) (string, error) {
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		return h.ownerKeyFromFeedToken(token)
+	}
+	return h.ownerKey(r, w, store)
+}
+
+func (h *RecordingHandler) ownerKeyFromFeedToken(token string) (string, error) {
+	if h.userRepo == nil {
+		return "", fmt.Errorf("feed token lookup is not configured")
+	}
+	user, err := h.userRepo.FindByFeedToken(token)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("user_%d", user.ID), nil
+}
+
+func writeRecordingAccessError(w http.ResponseWriter, r *http.Request) {
+	if strings.TrimSpace(r.URL.Query().Get("token")) != "" {
+		writeError(w, http.StatusUnauthorized, "token が不正です")
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
 }
 
 func newGuestOwnerID() string {
@@ -303,9 +367,9 @@ func (h *RecordingHandler) GetRecordingStatus(store sessions.Store) http.Handler
 			return
 		}
 
-		ownerKey, err := h.ownerKey(r, w, store)
+		ownerKey, err := h.ownerKeyForRecordingAccess(r, w, store)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			writeRecordingAccessError(w, r)
 			return
 		}
 		if info.OwnerKey != ownerKey {
@@ -333,9 +397,9 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 			return
 		}
 
-		ownerKey, err := h.ownerKey(r, w, store)
+		ownerKey, err := h.ownerKeyForRecordingAccess(r, w, store)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "セッションの保存に失敗しました")
+			writeRecordingAccessError(w, r)
 			return
 		}
 		if info.OwnerKey != ownerKey {
@@ -480,6 +544,107 @@ func (h *RecordingHandler) ListRecordings(store sessions.Store) http.HandlerFunc
 			"recordings": recordings,
 		})
 	}
+}
+
+func (h *RecordingHandler) FeedXML(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimSpace(r.URL.Query().Get("token"))
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "token が必要です")
+		return
+	}
+	ownerKey, err := h.ownerKeyFromFeedToken(token)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "token が不正です")
+		return
+	}
+	recordings, err := h.listOwnerRecordings(r.Context(), ownerKey)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "録音一覧の取得に失敗しました: "+err.Error())
+		return
+	}
+
+	sort.Slice(recordings, func(i, j int) bool {
+		return recordings[i].StartTime > recordings[j].StartTime
+	})
+
+	items := make([]recordingRSSItem, 0, len(recordings))
+	for _, info := range recordings {
+		if info.Status != "completed" || info.FilePath == "" || !h.validateRecordingFilePath(info.FilePath) {
+			continue
+		}
+		stat, err := os.Stat(info.FilePath)
+		if err != nil || stat.Size() <= 0 {
+			continue
+		}
+		items = append(items, recordingRSSItem{
+			Title:   info.ProgramName,
+			GUID:    info.RecordingID,
+			PubDate: recordingPubDate(info),
+			Enclosure: recordingRSSEnclosure{
+				URL:    recordingURL(r, info.RecordingID, token),
+				Length: stat.Size(),
+				Type:   "audio/aac",
+			},
+		})
+	}
+
+	feed := recordingRSS{
+		Version:     "2.0",
+		XMLNSItunes: "http://www.itunes.com/dtds/podcast-1.0.dtd",
+		Channel: recordingRSSChannel{
+			Title:        "Radio Review Recordings",
+			Link:         requestBaseURL(r) + "/recording/history",
+			Description:  "Recorded radio programs",
+			Language:     "ja",
+			ItunesAuthor: "Radio Review",
+			Items:        items,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(xml.Header))
+	_ = xml.NewEncoder(w).Encode(feed)
+}
+
+func recordingURL(r *http.Request, recordingID, token string) string {
+	q := url.Values{}
+	q.Set("recording_id", recordingID)
+	q.Set("token", token)
+	return requestBaseURL(r) + "/recording/download?" + q.Encode()
+}
+
+func requestBaseURL(r *http.Request) string {
+	scheme := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0])
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+	if host == "" {
+		host = r.Host
+	}
+	return scheme + "://" + host
+}
+
+func recordingPubDate(info model.RecordingInfo) string {
+	for _, layout := range []string{"20060102150405", "200601021504", time.RFC3339} {
+		value := info.StartTime
+		if layout == time.RFC3339 {
+			value = info.CreatedAt
+		}
+		if value == "" {
+			continue
+		}
+		t, err := time.ParseInLocation(layout, value, time.Local)
+		if err == nil {
+			return t.Format(time.RFC1123Z)
+		}
+	}
+	return time.Now().Format(time.RFC1123Z)
 }
 
 // ShowHistory は GET /recording/history を処理する。

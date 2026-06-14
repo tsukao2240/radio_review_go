@@ -25,8 +25,8 @@ func newUserRepoMock(t *testing.T) (*UserRepository, sqlmock.Sqlmock, func()) {
 func userRows() *sqlmock.Rows {
 	now := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
 	return sqlmock.NewRows([]string{
-		"id", "name", "email", "email_verified_at", "password", "remember_token", "created_at", "updated_at",
-	}).AddRow(int64(7), "alice", "alice@example.com", nil, "hash", nil, now, now)
+		"id", "name", "email", "email_verified_at", "password", "remember_token", "feed_token", "created_at", "updated_at",
+	}).AddRow(int64(7), "alice", "alice@example.com", nil, "hash", nil, "feed-token", now, now)
 }
 
 func TestUserRepositoryFindByID(t *testing.T) {
@@ -69,25 +69,49 @@ func TestUserRepositoryFindByEmail(t *testing.T) {
 	}
 }
 
+func TestUserRepositoryFindByFeedToken(t *testing.T) {
+	repo, mock, cleanup := newUserRepoMock(t)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM users WHERE feed_token = ? LIMIT 1")).
+		WithArgs("feed-token").
+		WillReturnRows(userRows())
+
+	got, err := repo.FindByFeedToken("feed-token")
+	if err != nil {
+		t.Fatalf("FindByFeedToken: %v", err)
+	}
+	if got.ID != 7 || got.FeedToken != "feed-token" {
+		t.Fatalf("unexpected user: %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func TestUserRepositoryCreate(t *testing.T) {
 	repo, mock, cleanup := newUserRepoMock(t)
 	defer cleanup()
 
-	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users (name, email, email_verified_at, password, remember_token, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, NOW(), NOW())`)).
-		WithArgs("alice", "alice@example.com", nil, "hash", nil).
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users (name, email, email_verified_at, password, remember_token, feed_token, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`)).
+		WithArgs("alice", "alice@example.com", nil, "hash", nil, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(9, 1))
 
-	id, err := repo.Create(&model.User{
+	user := &model.User{
 		Name:     "alice",
 		Email:    "alice@example.com",
 		Password: "hash",
-	})
+	}
+	id, err := repo.Create(user)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if id != 9 {
 		t.Fatalf("id = %d, want 9", id)
+	}
+	if len(user.FeedToken) != 64 {
+		t.Fatalf("FeedToken length = %d, want 64", len(user.FeedToken))
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
