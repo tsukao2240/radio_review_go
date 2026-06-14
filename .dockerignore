@@ -1,0 +1,17 @@
+.git
+.github
+.githooks
+.vscode
+.playwright-mcp
+
+.env
+.env.*
+!.env.example
+
+bin
+coverage.out
+*.log
+server
+
+storage
+docs

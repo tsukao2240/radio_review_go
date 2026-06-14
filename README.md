@@ -68,7 +68,7 @@ radio_review_go/
 
 ```bash
 # .envを作成
-cp .env.example .env  # なければ下記「環境変数」を参考に手動作成
+cp .env.example .env
 
 # Radiko認証キーを配置（タイムフリー録音に必須・下記「Radiko認証キー」参照）
 # storage/keys/radiko_auth_key.txt
@@ -78,7 +78,23 @@ docker compose up -d
 
 # ブラウザで確認
 open http://localhost:8080
+
+# 録音ファイル名リネームバッチ実行
+docker compose exec app ./batch rename-recordings ...
 ```
+
+Windows PowerShell の場合:
+
+```powershell
+Copy-Item .env.example .env
+New-Item -ItemType Directory -Force storage\keys, storage\recordings
+docker compose up -d
+Start-Process http://localhost:8080
+```
+
+Dockerイメージには `storage/keys/` の認証キーを含めない。Docker利用時は `./storage:/app/storage` のボリュームマウントで参照する。
+
+Docker Compose の MySQL は `./migrations:/docker-entrypoint-initdb.d` により、`db_data` ボリュームの初回作成時のみマイグレーションを適用する。既存の `db_data` ボリュームには後から追加したマイグレーション（005以降）は自動適用されない。既存ボリュームに反映する場合は `docker compose exec -T db mysql -ularavel -ppassword radio_review < migrations/00X.sql` で手動適用するか、データを破棄できる場合のみ `docker compose down -v` 後に再作成する。
 
 ### ローカル（Go直実行）
 
