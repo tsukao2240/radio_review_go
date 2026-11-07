@@ -4,10 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	appmetrics "github.com/tsukao2240/radio_review_go/internal/metrics"
 	"github.com/tsukao2240/radio_review_go/internal/model"
@@ -25,6 +29,20 @@ type favoriteScheduleService interface {
 // SetFavoriteScheduleService はお気に入り自動録音用の番組表取得処理を設定する。
 func (s *Scheduler) SetFavoriteScheduleService(svc favoriteScheduleService) {
 	s.favoriteScheduleService = svc
+}
+
+func (s *Scheduler) reconcileFavoriteRecordings(ctx context.Context) {
+	// 起動時だけでなく、稼働中のDB障害・Redis再起動からも回復する。
+	if err := s.recoverInterruptedFavoriteRecordings(ctx); err != nil {
+		slog.Error("[job] favorite recording: recovery failed", "error", err)
+		return
+	}
+	if err := s.restoreFavoriteRecordingMetadata(ctx); err != nil {
+		slog.Error("[job] favorite recording: metadata restore failed", "error", err)
+		return
+	}
+	s.syncFavoriteRecordings(ctx)
+	s.processRecordingSchedules(ctx)
 }
 
 func (s *Scheduler) syncFavoriteRecordings(ctx context.Context) {
@@ -170,19 +188,28 @@ func (s *Scheduler) cancelRemovedFavoriteRecordings(ctx context.Context, favorit
 	return nil
 }
 
-// デスクトップで一つのアプリを起動する前提。前回の強制終了時に残った録音を再開する。
+// デスクトップで一つのアプリを起動する前提。稼働中のワーカーがない未完了録音を再開する。
 // ダウンロードは部分ファイルへの継ぎ足しではなく、同じ放送を最初から再取得する。
 func (s *Scheduler) recoverInterruptedFavoriteRecordings(ctx context.Context) error {
+	// SELECTから復旧完了まで開始・終了の登録を止め、取得した行とワーカーの対応を保つ。
+	s.recordingMu.Lock()
+	defer s.recordingMu.Unlock()
 	var interrupted []model.RecordingSchedule
 	if err := s.db.SelectContext(ctx, &interrupted, `SELECT * FROM recording_schedules
 		WHERE auto_recording_key IS NOT NULL AND status = 'recording'`); err != nil {
 		return err
 	}
 	for _, sc := range interrupted {
-		const reason = "前回のアプリ終了により中断。起動後に再取得します"
+		if s.activeRecordings[sc.ID] {
+			continue
+		}
+		const reason = "未完了の録音を検出。再取得します"
 		if sc.RecordingID != nil {
 			// 音声取得が終わりDB更新の直前に終了した場合は、完了情報だけ復旧する。
 			raw, err := s.redis.Get(ctx, "recording_"+*sc.RecordingID).Result()
+			if err != nil && !errors.Is(err, redis.Nil) {
+				return fmt.Errorf("load interrupted recording %s: %w", *sc.RecordingID, err)
+			}
 			var info model.RecordingInfo
 			if err == nil && json.Unmarshal([]byte(raw), &info) == nil && info.Status == "completed" && s.favoriteRecordingFileExists(sc, info) {
 				if err := s.completeFavoriteRecording(ctx, sc.ID, &info); err != nil {
@@ -190,7 +217,10 @@ func (s *Scheduler) recoverInterruptedFavoriteRecordings(ctx context.Context) er
 				}
 				continue
 			}
-			_ = updateRedisRecordingStatus(ctx, s.redis, *sc.RecordingID, "failed", reason)
+			// 古い「録音中」が残ると次の取得を妨げる。無効化に失敗したらIDを維持する。
+			if err := updateRedisRecordingStatus(ctx, s.redis, *sc.RecordingID, "failed", reason); err != nil && !errors.Is(err, redis.Nil) {
+				return fmt.Errorf("invalidate interrupted recording %s: %w", *sc.RecordingID, err)
+			}
 		}
 		if _, err := s.db.ExecContext(ctx, `UPDATE recording_schedules
 			SET status = 'pending', recording_id = NULL, next_retry_at = NULL,
@@ -225,9 +255,8 @@ func (s *Scheduler) favoriteRecordingFileExists(sc model.RecordingSchedule, info
 }
 
 func (s *Scheduler) restoreFavoriteRecordingMetadata(ctx context.Context) error {
-	var completed []model.RecordingSchedule
-	if err := s.db.SelectContext(ctx, &completed, `SELECT * FROM recording_schedules
-		WHERE auto_recording_key IS NOT NULL AND status = 'completed' AND recording_metadata IS NOT NULL`); err != nil {
+	completed, err := s.completedFavoriteRecordings(ctx)
+	if err != nil {
 		return err
 	}
 	for _, sc := range completed {
@@ -241,6 +270,39 @@ func (s *Scheduler) restoreFavoriteRecordingMetadata(ctx context.Context) error 
 		if err := saveRecordingInfo(ctx, s.redis, info.RecordingID, &info); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (s *Scheduler) completedFavoriteRecordings(ctx context.Context) ([]model.RecordingSchedule, error) {
+	var completed []model.RecordingSchedule
+	err := s.db.SelectContext(ctx, &completed, `SELECT * FROM recording_schedules
+		WHERE auto_recording_key IS NOT NULL AND status = 'completed' AND recording_metadata IS NOT NULL`)
+	return completed, err
+}
+
+// Redisが空でもDBに残る音声を孤児扱いしない。DB確認に失敗した場合は清掃を中止する。
+func (s *Scheduler) protectFavoriteRecordingFiles(ctx context.Context, active map[string]bool) error {
+	completed, err := s.completedFavoriteRecordings(ctx)
+	if err != nil {
+		return err
+	}
+	for _, sc := range completed {
+		if sc.RecordingMetadata == nil {
+			continue
+		}
+		var info model.RecordingInfo
+		if err := json.Unmarshal([]byte(*sc.RecordingMetadata), &info); err != nil {
+			return fmt.Errorf("read recording metadata for schedule %d: %w", sc.ID, err)
+		}
+		if !isRecordingFilePathAllowed(s.storagePath, info.FilePath) {
+			return fmt.Errorf("invalid recording path for schedule %d", sc.ID)
+		}
+		path, err := filepath.Abs(info.FilePath)
+		if err != nil {
+			return err
+		}
+		active[path] = true
 	}
 	return nil
 }

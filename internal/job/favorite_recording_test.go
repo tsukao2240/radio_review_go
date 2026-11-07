@@ -338,9 +338,10 @@ func TestAutomaticRecordingDownloadsJapaneseBroadcastTimesAndKeepsResult(t *test
 func TestFindPendingBeforeWaitsForBroadcastEndAndRetryDeadline(t *testing.T) {
 	s, mock, _ := newFavoriteRecordingScheduler(t)
 	cutoff := "2026-11-08 12:00:00"
+	now := "2026-11-08 12:05:00"
 	mock.ExpectQuery("SELECT \\* FROM recording_schedules WHERE status = 'pending' AND scheduled_end_time <= \\? AND \\(next_retry_at IS NULL OR next_retry_at <= \\?\\)").
-		WithArgs(cutoff, cutoff).WillReturnRows(favoriteScheduleRows())
-	if _, err := findPendingBefore(s.db, cutoff); err != nil {
+		WithArgs(cutoff, now).WillReturnRows(favoriteScheduleRows())
+	if _, err := findPendingBefore(s.db, cutoff, now); err != nil {
 		t.Fatal(err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
