@@ -340,3 +340,19 @@ func TestTemplateSmoke_Favorites_Empty(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestTemplateSmoke_AutomaticRecordingExpired(t *testing.T) {
+	key := "auto"
+	reason := "タイムフリー取得期限を超過しました"
+	html, err := renderTemplateString(t, projectRoot(t), "web/templates/recording/schedules.html", loggedInTD(map[string]interface{}{
+		"Schedules": []model.RecordingSchedule{{ID: 1, ProgramTitle: "show", AutoRecordingKey: &key, Status: "expired", ErrorMessage: &reason}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"お気に入り自動録音", "期限切れ", reason} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing status text: %s", want)
+		}
+	}
+}

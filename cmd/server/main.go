@@ -154,6 +154,7 @@ func main() {
 	// --- Background jobs ---
 	scheduler := job.NewScheduler(db, rdb, radikoClient, hlsDownloader, storagePath)
 	scheduler.SetNotificationService(notifSvc)
+	scheduler.SetFavoriteScheduleService(radikoSvc)
 	go scheduler.Start(ctx)
 
 	// --- Router ---
