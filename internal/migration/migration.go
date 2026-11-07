@@ -25,6 +25,7 @@ var migrations = []Migration{
 	{Version: "005_add_retry_count_to_recording_schedules", File: "005_add_retry_count_to_recording_schedules.sql"},
 	{Version: "006_add_next_retry_at_to_recording_schedules", File: "006_add_next_retry_at_to_recording_schedules.sql"},
 	{Version: "007_add_feed_token_to_users", File: "007_add_feed_token_to_users.sql"},
+	{Version: "008_favorite_auto_recordings", File: "008_favorite_auto_recordings.sql"},
 }
 
 func Run(ctx context.Context, db *sqlx.DB) error {
@@ -142,6 +143,8 @@ func shouldSkip(ctx context.Context, db *sqlx.DB, version string) (bool, error) 
 		return columnExists(ctx, db, "recording_schedules", "next_retry_at")
 	case "007_add_feed_token_to_users":
 		return columnExists(ctx, db, "users", "feed_token")
+	case "008_favorite_auto_recordings":
+		return columnExists(ctx, db, "recording_schedules", "auto_recording_key")
 	default:
 		return false, nil
 	}

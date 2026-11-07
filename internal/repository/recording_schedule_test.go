@@ -76,7 +76,7 @@ func TestRecordingScheduleRepositoryFindPendingBefore(t *testing.T) {
 
 	before := "2026-06-09 12:00:00"
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM recording_schedules
-		 WHERE status = 'pending' AND scheduled_start_time <= ?
+		 WHERE status = 'pending' AND scheduled_end_time <= ?
 		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`)).
 		WithArgs(before, before).

@@ -365,6 +365,7 @@ func (s *stubRecordingNotificationService) CreateRecordingFailed(sc *model.Recor
 }
 
 func TestStartScheduledRecordingNotifiesCompleted(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // stub 音声に実機の FFmpeg を適用しない。
 	db, mock := newSchedulerSQLMock(t)
 	defer db.Close()
 	mock.ExpectExec("UPDATE recording_schedules SET status = \\?, error_message = \\?, updated_at = NOW\\(\\) WHERE id = \\?").

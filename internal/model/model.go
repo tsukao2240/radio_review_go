@@ -73,7 +73,9 @@ type RecordingSchedule struct {
 	ProgramTitle       string     `db:"program_title"`
 	ScheduledStartTime time.Time  `db:"scheduled_start_time"`
 	ScheduledEndTime   time.Time  `db:"scheduled_end_time"`
-	Status             string     `db:"status"` // pending/recording/completed/failed/cancelled
+	Status             string     `db:"status"`             // pending/recording/completed/failed/cancelled/expired
+	AutoRecordingKey   *string    `db:"auto_recording_key"` // お気に入り自動録音の放送単位キー
+	RecordingMetadata  *string    `db:"recording_metadata"` // 再起動時に録音一覧を復元するためのJSON
 	RecordingID        *string    `db:"recording_id"`
 	ErrorMessage       *string    `db:"error_message"`
 	RetryCount         int        `db:"retry_count"`

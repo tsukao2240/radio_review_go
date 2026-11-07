@@ -32,7 +32,10 @@
         {{ range $schedules }}
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
           <td class="py-3 px-4 text-gray-700 dark:text-gray-300">{{ .StationID }}</td>
-          <td class="py-3 px-4 text-gray-800 dark:text-white font-medium">{{ .ProgramTitle }}</td>
+          <td class="py-3 px-4 text-gray-800 dark:text-white font-medium">
+            {{ .ProgramTitle }}
+            {{ if .AutoRecordingKey }}<span class="block text-xs text-green-600 dark:text-green-400">お気に入り自動録音</span>{{ end }}
+          </td>
           <td class="py-3 px-4 text-gray-600 dark:text-gray-400">
             {{ .ScheduledStartTime.Format "2006/01/02 15:04" }} 〜 {{ .ScheduledEndTime.Format "15:04" }}
           </td>
@@ -47,9 +50,12 @@
             <span class="inline-block px-2 py-0.5 text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full">失敗</span>
             {{ else if eq .Status "cancelled" }}
             <span class="inline-block px-2 py-0.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">キャンセル</span>
+            {{ else if eq .Status "expired" }}
+            <span class="inline-block px-2 py-0.5 text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full">期限切れ</span>
             {{ else }}
             <span class="inline-block px-2 py-0.5 text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">{{ .Status }}</span>
             {{ end }}
+            {{ if .ErrorMessage }}<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ .ErrorMessage }}</p>{{ end }}
           </td>
           <td class="py-3 px-4">
             {{ if eq .Status "pending" }}

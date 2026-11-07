@@ -75,7 +75,8 @@ func insertColon(t string) string {
 
 // fetchXML は URL から XML を取得してデコードする
 func fetchXML(url string, v interface{}) error {
-	resp, err := http.Get(url) //nolint:gosec
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(url) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("http.Get %s: %w", url, err)
 	}
