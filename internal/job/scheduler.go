@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -43,6 +44,8 @@ type Scheduler struct {
 	notificationService     recordingNotificationService
 	favoriteScheduleService favoriteScheduleService
 	recordingSlots          chan struct{}
+	recordingMu             sync.Mutex
+	activeRecordings        map[int64]bool
 }
 
 // NewScheduler は新しい Scheduler を返す。
@@ -54,13 +57,14 @@ func NewScheduler(
 	storagePath string,
 ) *Scheduler {
 	return &Scheduler{
-		db:             db,
-		redis:          rdb,
-		radikoClient:   radikoClient,
-		hlsDownloader:  hlsDownloader,
-		storagePath:    storagePath,
-		retentionDays:  recordingRetentionDaysFromEnv(),
-		recordingSlots: make(chan struct{}, 2),
+		db:               db,
+		redis:            rdb,
+		radikoClient:     radikoClient,
+		hlsDownloader:    hlsDownloader,
+		storagePath:      storagePath,
+		retentionDays:    recordingRetentionDaysFromEnv(),
+		recordingSlots:   make(chan struct{}, 2),
+		activeRecordings: make(map[int64]bool),
 	}
 }
 
@@ -71,26 +75,10 @@ func (s *Scheduler) SetNotificationService(notificationService recordingNotifica
 // Start は goroutine で全ジョブを開始する。ctx がキャンセルされると全ジョブが停止する。
 func (s *Scheduler) Start(ctx context.Context) {
 	if s.favoriteScheduleService != nil {
-		if err := s.recoverInterruptedFavoriteRecordings(ctx); err != nil {
-			slog.Error("[job] favorite recording: recovery failed", "error", err)
-		}
 		go func() {
-			restored := false
-			check := func(ctx context.Context) {
-				// OS起動直後にRedisがまだ利用できない場合も、次回の確認で復元を試す。
-				if !restored {
-					if err := s.restoreFavoriteRecordingMetadata(ctx); err != nil {
-						slog.Error("[job] favorite recording: metadata restore failed", "error", err)
-					} else {
-						restored = true
-					}
-				}
-				s.syncFavoriteRecordings(ctx)
-				s.processRecordingSchedules(ctx)
-			}
 			// 再起動時も最初の5分を待たず、取り逃した放送を確認する。
-			check(ctx)
-			s.runEveryN(ctx, favoriteRecordingInterval, check)
+			s.reconcileFavoriteRecordings(ctx)
+			s.runEveryN(ctx, favoriteRecordingInterval, s.reconcileFavoriteRecordings)
 		}()
 	}
 	// 毎分実行
@@ -220,7 +208,7 @@ func (s *Scheduler) deleteExpiredRecordings(ctx context.Context) {
 func (s *Scheduler) sweepOrphanRecordingFiles(ctx context.Context) {
 	activeFiles, err := s.activeRecordingFiles(ctx)
 	if err != nil {
-		slog.Error("[job] sweepOrphanRecordingFiles: Redis scan failed", "error", err)
+		slog.Error("[job] sweepOrphanRecordingFiles: recording lookup failed", "error", err)
 		return
 	}
 	cutoff := time.Now().Add(-25 * time.Hour)
@@ -291,6 +279,9 @@ func (s *Scheduler) activeRecordingFiles(ctx context.Context) (map[string]bool, 
 			break
 		}
 		cursor = nextCursor
+	}
+	if err := s.protectFavoriteRecordingFiles(ctx, active); err != nil {
+		return nil, err
 	}
 	return active, nil
 }
@@ -554,7 +545,9 @@ func (s *Scheduler) deleteDuplicateRecords(ctx context.Context) {
 func (s *Scheduler) processRecordingSchedules(ctx context.Context) {
 	now := time.Now()
 
-	schedules, err := findPendingBefore(s.db, now.Add(-timefreeAvailabilityDelay).Format("2006-01-02 15:04:05"))
+	schedules, err := findPendingBefore(s.db,
+		now.Add(-timefreeAvailabilityDelay).Format("2006-01-02 15:04:05"),
+		now.Format("2006-01-02 15:04:05"))
 	if err != nil {
 		appmetrics.IncRecordingJobFailure("process_schedules", "find_pending")
 		slog.Error("[job] processRecordingSchedules: FindPendingBefore failed", "error", err)
@@ -575,6 +568,20 @@ func (s *Scheduler) processRecordingSchedules(ctx context.Context) {
 
 // startScheduledRecording は録音スケジュールの録音を開始し、完了・失敗を DB に反映する。
 func (s *Scheduler) startScheduledRecording(ctx context.Context, sc *model.RecordingSchedule) {
+	// 復旧処理が稼働中のワーカーを中断扱いしないよう、DB取得の前から登録する。
+	s.recordingMu.Lock()
+	if s.activeRecordings[sc.ID] {
+		s.recordingMu.Unlock()
+		return
+	}
+	s.activeRecordings[sc.ID] = true
+	s.recordingMu.Unlock()
+	defer func() {
+		s.recordingMu.Lock()
+		delete(s.activeRecordings, sc.ID)
+		s.recordingMu.Unlock()
+	}()
+
 	appmetrics.IncRecordingJobRun("scheduled_recording")
 	slog.Info("[job] scheduled recording started", "id", sc.ID, "station_id", sc.StationID, "title", sc.ProgramTitle)
 
@@ -812,15 +819,15 @@ func (s *Scheduler) notifyRecordingFailed(sc *model.RecordingSchedule, errMsg st
 	}
 }
 
-// findPendingBefore は status=pending かつ scheduled_end_time <= t のスケジュールを返す。
-func findPendingBefore(db *sqlx.DB, t string) ([]model.RecordingSchedule, error) {
+// findPendingBefore は配信待ち時間と再試行日時を別々に判定する。
+func findPendingBefore(db *sqlx.DB, completedBefore, retryBefore string) ([]model.RecordingSchedule, error) {
 	var schedules []model.RecordingSchedule
 	err := db.Select(&schedules,
 		`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_end_time <= ?
 		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`,
-		t, t,
+		completedBefore, retryBefore,
 	)
 	if err != nil {
 		return nil, err

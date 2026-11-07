@@ -11,7 +11,7 @@ import (
 type stubScheduleRepo struct {
 	findByUserFunc   func(userID int64) ([]model.RecordingSchedule, error)
 	findByIDFunc     func(id int64) (*model.RecordingSchedule, error)
-	findPendingFunc  func(t string) ([]model.RecordingSchedule, error)
+	findPendingFunc  func(completedBefore, retryBefore string) ([]model.RecordingSchedule, error)
 	createFunc       func(s *model.RecordingSchedule) (int64, error)
 	updateStatusFunc func(id int64, status string, errMsg *string) error
 	cancelFunc       func(id int64) error
@@ -29,9 +29,9 @@ func (r *stubScheduleRepo) FindByID(id int64) (*model.RecordingSchedule, error) 
 	}
 	return nil, nil
 }
-func (r *stubScheduleRepo) FindPendingBefore(t string) ([]model.RecordingSchedule, error) {
+func (r *stubScheduleRepo) FindPendingBefore(completedBefore, retryBefore string) ([]model.RecordingSchedule, error) {
 	if r.findPendingFunc != nil {
-		return r.findPendingFunc(t)
+		return r.findPendingFunc(completedBefore, retryBefore)
 	}
 	return nil, nil
 }

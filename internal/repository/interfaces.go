@@ -63,7 +63,7 @@ type FavoriteProgramRepositoryInterface interface {
 type RecordingScheduleRepositoryInterface interface {
 	FindByUser(userID int64) ([]model.RecordingSchedule, error)
 	FindByID(id int64) (*model.RecordingSchedule, error)
-	FindPendingBefore(t string) ([]model.RecordingSchedule, error)
+	FindPendingBefore(completedBefore, retryBefore string) ([]model.RecordingSchedule, error)
 	Create(s *model.RecordingSchedule) (int64, error)
 	UpdateStatus(id int64, status string, errMsg *string) error
 	IncrementRetryCount(id int64, errMsg *string) error

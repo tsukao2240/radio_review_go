@@ -36,16 +36,16 @@ func (r *RecordingScheduleRepository) FindByID(id int64) (*model.RecordingSchedu
 	return &s, nil
 }
 
-// FindPendingBefore returns pending schedules whose scheduled_end_time is before or equal to t.
-// t should be formatted as a MySQL-compatible datetime string (e.g. "2006-01-02 15:04:05").
-func (r *RecordingScheduleRepository) FindPendingBefore(t string) ([]model.RecordingSchedule, error) {
+// FindPendingBefore checks broadcast availability and retry readiness independently.
+// Both cutoffs use MySQL-compatible datetime strings ("2006-01-02 15:04:05").
+func (r *RecordingScheduleRepository) FindPendingBefore(completedBefore, retryBefore string) ([]model.RecordingSchedule, error) {
 	var schedules []model.RecordingSchedule
 	err := r.db.Select(&schedules,
 		`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_end_time <= ?
 		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`,
-		t, t,
+		completedBefore, retryBefore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("repository.RecordingScheduleRepository.FindPendingBefore: %w", err)

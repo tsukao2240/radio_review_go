@@ -5,6 +5,16 @@ on:
   pull_request:
 
 jobs:
+  windows-autostart:
+    name: Windows autostart
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Test startup task registration without changing OS settings
+        shell: powershell
+        run: ./scripts/test-autostart.ps1
+
   test:
     name: Test
     runs-on: ubuntu-latest

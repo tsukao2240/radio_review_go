@@ -75,14 +75,15 @@ func TestRecordingScheduleRepositoryFindPendingBefore(t *testing.T) {
 	defer cleanup()
 
 	before := "2026-06-09 12:00:00"
+	now := "2026-06-09 12:05:00"
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM recording_schedules
 		 WHERE status = 'pending' AND scheduled_end_time <= ?
 		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
 		 ORDER BY scheduled_start_time ASC`)).
-		WithArgs(before, before).
+		WithArgs(before, now).
 		WillReturnRows(recordingScheduleRows())
 
-	got, err := repo.FindPendingBefore(before)
+	got, err := repo.FindPendingBefore(before, now)
 	if err != nil {
 		t.Fatalf("FindPendingBefore: %v", err)
 	}

@@ -195,7 +195,10 @@ func TestSchedulerSweepOrphanRecordingFiles(t *testing.T) {
 		t.Fatalf("redis set: %v", err)
 	}
 
-	s := NewScheduler(nil, rdb, nil, nil, dir)
+	db, mock := newSchedulerSQLMock(t)
+	defer db.Close()
+	mock.ExpectQuery("SELECT \\* FROM recording_schedules.*status = 'completed' AND recording_metadata IS NOT NULL").WillReturnRows(favoriteScheduleRows())
+	s := NewScheduler(db, rdb, nil, nil, dir)
 	s.SweepOrphanRecordingFiles(context.Background())
 
 	if _, err := os.Stat(oldOrphan); !os.IsNotExist(err) {
@@ -205,6 +208,9 @@ func TestSchedulerSweepOrphanRecordingFiles(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("%s should remain: %v", path, err)
 		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 
