@@ -2,6 +2,7 @@ package recordingfile
 
 import (
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -134,4 +135,9 @@ func atoi(s string) int {
 		n = n*10 + int(r-'0')
 	}
 	return n
+}
+
+// AttachmentDisposition encodes non-ASCII filenames using RFC 2231/5987.
+func AttachmentDisposition(name string) string {
+	return mime.FormatMediaType("attachment", map[string]string{"filename": name})
 }

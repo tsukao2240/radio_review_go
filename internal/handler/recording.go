@@ -433,7 +433,7 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 
 		downloadName := recordingfile.DisplayName(info.FilePath, info.StartTime, info.StationID, info.ProgramName)
 		w.Header().Set("Content-Type", recordingfile.ContentType(info.FilePath))
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, downloadName))
+		w.Header().Set("Content-Disposition", recordingfile.AttachmentDisposition(downloadName))
 		http.ServeContent(w, r, downloadName, time.Time{}, f)
 	}
 }
