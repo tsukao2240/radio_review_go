@@ -102,7 +102,7 @@
                         <div class="relative ml-2 group">
                             <button class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                                 <i class="fas fa-user-circle mr-2"></i>
-                                {{ .User.Name }}
+                                メニュー
                                 <i class="fas fa-chevron-down ml-2"></i>
                             </button>
                             <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-2 invisible group-hover:visible transition-all">
@@ -113,12 +113,6 @@
                                     <i class="fas fa-calendar-check mr-2"></i>録音予約
                                 </a>
                                 <div class="border-t border-gray-200 dark:border-gray-700 my-2"></div>
-                                <form method="POST" action="/logout">
-                                    <input type="hidden" name="_csrf" value="{{ .CSRFToken }}">
-                                    <button type="submit" class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-                                        <i class="fas fa-sign-out-alt mr-2"></i>ログアウト
-                                    </button>
-                                </form>
                             </div>
                         </div>
                         {{ else }}
@@ -171,7 +165,7 @@
 
                     {{ if .User }}
                     <div class="border-t border-white/20 pt-4 mt-4">
-                        <p class="text-white/70 text-sm px-4 mb-2">{{ .User.Name }}</p>
+                        <p class="text-white/70 text-sm px-4 mb-2">メニュー</p>
                         <a href="/my" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-user mr-3"></i>マイページ
                         </a>
@@ -186,21 +180,6 @@
                         </a>
                         <a href="/program" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-pen-square mr-3"></i>レビューを投稿
-                        </a>
-                        <form method="POST" action="/logout">
-                            <input type="hidden" name="_csrf" value="{{ .CSRFToken }}">
-                            <button type="submit" class="w-full text-left touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
-                                <i class="fas fa-sign-out-alt mr-3"></i>ログアウト
-                            </button>
-                        </form>
-                    </div>
-                    {{ else }}
-                    <div class="border-t border-white/20 pt-4 mt-4">
-                        <a href="/login" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
-                            <i class="fas fa-sign-in-alt mr-3"></i>ログイン
-                        </a>
-                        <a href="/register" class="block touch-target bg-white/20 text-white hover:bg-white/30 rounded-lg px-4 py-3 transition font-semibold">
-                            <i class="fas fa-user-plus mr-3"></i>会員登録
                         </a>
                     </div>
                     {{ end }}

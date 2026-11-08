@@ -79,7 +79,6 @@ func main() {
 	likeRepo := repository.NewPostLikeRepository(db)
 	commentRepo := repository.NewPostCommentRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
-	passwordResetRepo := repository.NewPasswordResetRepository(db)
 	pushRepo := repository.NewPushSubscriptionRepository(db)
 
 	// --- Services ---
@@ -93,7 +92,6 @@ func main() {
 	notifSvc.SetPushSender(pushSvc)
 	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
 	recommendSvc := service.NewRecommendationService(postRepo, programRepo, favRepo, rdb)
-	passwordResetSvc := service.NewPasswordResetServiceWithMailer(passwordResetRepo, userRepo, service.NewMailerFromEnv())
 
 	// --- Radiko client ---
 	keyPath := "storage/keys/radiko_auth_key.txt"
@@ -113,7 +111,6 @@ func main() {
 	}
 
 	// --- Handlers ---
-	authHandler := handler.NewAuthHandler(userRepo, store)
 	broadcastHandler := handler.NewBroadcastHandler(radikoSvc, searchSvc, programRepo)
 	postHandler := handler.NewPostHandler(postSvc, interactionSvc, store)
 	mypageHandler := handler.NewMypageHandler(postSvc, store)
@@ -125,26 +122,18 @@ func main() {
 	pushHandler := handler.NewPushHandler(pushSvc)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
 	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
-	passwordResetHandler := handler.NewPasswordResetHandler(passwordResetSvc)
 
 	// --- フラッシュメッセージストアの登録 ---
 	handler.FlashStore = store
 
-	// --- ユーザー解決関数の登録 (RenderWithBase でナビに使用) ---
+	// このPCでは既存のお気に入りを持つユーザーをログイン不要で利用する。
+	var localUserID int64
+	if err := db.Get(&localUserID, `SELECT u.id FROM users u
+ ORDER BY (SELECT COUNT(*) FROM favorite_programs f WHERE f.user_id = u.id) DESC, u.id ASC LIMIT 1`); err != nil {
+		fatal("resolve local user failed", err)
+	}
 	handler.ResolveUser = func(r *http.Request) *model.User {
-		session, err := store.Get(r, "radio_review_session")
-		if err != nil {
-			return nil
-		}
-		idVal, ok := session.Values["user_id"]
-		if !ok {
-			return nil
-		}
-		userID, ok := idVal.(int64)
-		if !ok {
-			return nil
-		}
-		user, err := userRepo.FindByID(userID)
+		user, err := userRepo.FindByID(localUserID)
 		if err != nil {
 			return nil
 		}
@@ -163,6 +152,7 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(appmetrics.HTTPMiddleware)
 	r.Use(appmiddleware.SecurityHeaders)
+	r.Use(appmiddleware.LocalUser(localUserID))
 	r.Use(appmiddleware.CSRFProtection(store))
 
 	// 静的ファイル
@@ -187,18 +177,12 @@ func main() {
 	r.Get("/healthz", healthzHandler(db, rdb))
 	r.Handle("/metrics", promhttp.Handler())
 
-	// 認証（ログインは10回/分のレートリミット）
-	r.Get("/login", authHandler.ShowLogin)
-	r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/login", authHandler.Login)
-	r.Post("/logout", authHandler.Logout)
-	r.Get("/register", authHandler.ShowRegister)
-	r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/register", authHandler.Register)
-
-	// パスワードリセット（レートリミット: 5回/分）
-	r.Get("/password/reset", passwordResetHandler.ShowRequestForm)
-	r.With(appmiddleware.RateLimit(5, time.Minute)).Post("/password/email", passwordResetHandler.SendResetLink)
-	r.Get("/password/reset/{token}", passwordResetHandler.ShowResetForm)
-	r.With(appmiddleware.RateLimit(5, time.Minute)).Post("/password/update", passwordResetHandler.Reset)
+	// 古いPWAのログイン画面URLからも、そのままアプリへ移動する。
+	for _, path := range []string{"/login", "/register", "/password/reset"} {
+		r.Get(path, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/favorites", http.StatusSeeOther)
+		})
+	}
 
 	// トップ
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -219,25 +203,22 @@ func main() {
 	r.Get("/list/{station_id}/{title}/review", postHandler.ListReviewsByProgram)
 	r.Get("/program/{program_id}/rating", postHandler.GetProgramRating)
 
-	// レビュー（認証必須）
+	// レビュー（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/review/{id}", postHandler.ShowReviewForm)
 		r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/review/{id}", postHandler.CreateReview)
 	})
 
-	// マイページ（認証必須）
+	// マイページ（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/my", mypageHandler.Index)
 		r.Get("/my/edit/{program_id}", mypageHandler.Edit)
 		r.Post("/my/edit/{program_id}", mypageHandler.Update)
 		r.Post("/my", mypageHandler.Destroy)
 	})
 
-	// お気に入り（認証必須）
+	// お気に入り（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/favorites", favHandler.Index)
 		r.With(appmiddleware.RateLimit(30, time.Minute)).Post("/favorites", favHandler.Store)
 		r.With(appmiddleware.RateLimit(30, time.Minute)).Post("/favorites/delete", favHandler.Destroy)
@@ -258,17 +239,15 @@ func main() {
 	r.Get("/recording/history", recordingHandler.ShowHistory(store))
 	r.Post("/recording/delete", recordingHandler.DeleteRecording(store))
 
-	// 録音予約（認証必須）
+	// 録音予約（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/recording/schedules", scheduleHandler.Index)
 		r.Post("/recording/schedule", scheduleHandler.Store)
 		r.Post("/recording/schedule/cancel", scheduleHandler.Cancel)
 	})
 
-	// 通知（認証必須）
+	// 通知（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/notifications", notifHandler.Index)
 		r.Get("/api/notifications/unread", notifHandler.GetUnread)
 		r.Get("/api/notifications/all", notifHandler.GetAll)
@@ -279,17 +258,15 @@ func main() {
 		r.Delete("/api/push/subscribe", pushHandler.Unsubscribe)
 	})
 
-	// レコメンデーション（認証必須）
+	// レコメンデーション（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Get("/recommendations", recommendHandler.Index)
 		r.Get("/api/recommendations", recommendHandler.GetRecommendations)
 		r.Post("/api/recommendations/refresh", recommendHandler.Refresh)
 	})
 
-	// 投稿インタラクション API（認証必須）
+	// 投稿インタラクション API（ログイン不要）
 	r.Group(func(r chi.Router) {
-		r.Use(appmiddleware.RequireAuth(store))
 		r.Post("/api/posts/like", postHandler.LikePost)
 		r.Post("/api/posts/unlike", postHandler.UnlikePost)
 		r.With(appmiddleware.RateLimit(20, time.Minute)).Post("/api/posts/comment", postHandler.AddComment)
@@ -303,7 +280,7 @@ func main() {
 		port = "8080"
 	}
 
-	srv := newHTTPServer(":"+port, r)
+	srv := newHTTPServer("127.0.0.1:"+port, r)
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.ListenAndServe()
