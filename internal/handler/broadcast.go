@@ -120,10 +120,7 @@ func (h *BroadcastHandler) GetWeeklySchedule(w http.ResponseWriter, r *http.Requ
 // GetTwoWeekScheduleSelect は2週間番組表の放送局選択画面を返す
 // GET /timefree
 func (h *BroadcastHandler) GetTwoWeekScheduleSelect(w http.ResponseWriter, r *http.Request) {
-	areaID := r.URL.Query().Get("area")
-	if areaID == "" {
-		areaID = "JP13"
-	}
+	areaID := selectedTimefreeArea(w, r)
 
 	stations, err := fetchStationListForHandler(areaID)
 	if err != nil {
@@ -147,10 +144,7 @@ func (h *BroadcastHandler) GetTwoWeekScheduleByStation(w http.ResponseWriter, r 
 		http.Error(w, "station_id is required", http.StatusBadRequest)
 		return
 	}
-	areaID := r.URL.Query().Get("area")
-	if areaID == "" {
-		areaID = "JP13"
-	}
+	areaID := selectedTimefreeArea(w, r)
 
 	schedule, err := h.radikoService.GetTwoWeekSchedule(stationID)
 	if err != nil {

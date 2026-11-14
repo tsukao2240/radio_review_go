@@ -3,17 +3,20 @@
   if (window.radioLive) return;
   const nonce = document.querySelector('script[nonce]')?.nonce;
   const originalFetch = window.fetch.bind(window);
-  let busy = false, pending = false, source, fallback;
-  const editing = () => document.activeElement?.matches('main input, main textarea, main select') || [...document.querySelectorAll('main input[type=file]')].some(input => input.files.length);
+  let busy = false, pending = false, source, fallback, refreshController;
+  const editing = () => (document.activeElement?.matches('main input, main textarea, main select') && !document.activeElement?.matches('[data-live-navigation]')) || [...document.querySelectorAll('main input[type=file]')].some(input => input.files.length);
   async function refresh() {
     pending = true;
     if (busy || editing() || document.hidden) return;
     busy = true;
     pending = false;
     try {
-      const response = await originalFetch(location.href, {cache: 'no-store', headers: {'X-Live-Refresh': '1'}});
+      const requestedURL = location.href;
+      refreshController = new AbortController();
+      const response = await originalFetch(requestedURL, {cache: 'no-store', headers: {'X-Live-Refresh': '1'}, signal: refreshController.signal});
       if (!response.ok) throw new Error('refresh failed');
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      if (requestedURL !== location.href) { pending = true; return; }
       const oldMain = document.querySelector('main.main-content');
       const nextMain = page.querySelector('main.main-content');
       if (!oldMain || !nextMain) return;
@@ -22,6 +25,7 @@
       scripts.forEach(s => s.remove());
       // Preserve unsent edits even when focus moved to another control.
       oldMain.querySelectorAll('input:not([type=hidden]):not([type=file]), textarea, select').forEach(input => {
+        if (input.matches('[data-live-navigation]')) return;
         const dirty = input.tagName === 'SELECT'
           ? [...input.options].some(o => o.selected !== o.defaultSelected)
           : /^(checkbox|radio)$/.test(input.type) ? input.checked !== input.defaultChecked : input.value !== input.defaultValue;
@@ -63,6 +67,23 @@
     }
   }
   window.radioLive = {refresh, onReady: callback => callback()};
+  document.addEventListener('change', event => {
+    const select = event.target.closest('#area-select[data-live-navigation]');
+    if (!select) return;
+    event.stopImmediatePropagation();
+    const url = new URL(location.href);
+    url.pathname = '/timefree';
+    url.search = new URLSearchParams({area: select.value}).toString();
+    if (url.href !== location.href) history.pushState(null, '', url);
+    const status = document.getElementById('area-update-status');
+    if (status) status.textContent = '放送局を更新中…';
+    const stations = document.getElementById('timefree-stations');
+    if (stations) stations.setAttribute('aria-busy', 'true');
+    refreshController?.abort();
+    refresh();
+  }, true);
+  window.addEventListener('popstate', () => { refreshController?.abort(); refresh(); });
+
   window.fetch = async function(input, options) {
     const response = await originalFetch(input, options);
     const method = (options?.method || input?.method || 'GET').toUpperCase();

@@ -19,19 +19,20 @@
       <i class="fas fa-map-marker-alt mr-1"></i> エリア選択
     </h2>
     <form method="GET" action="/timefree" id="area-form">
-      <select name="area" id="area-select"
+      <select name="area" id="area-select" data-live-navigation="true" aria-controls="timefree-stations"
               class="w-full md:w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-400">
         {{ range $areaID, $areaName := $areas }}
         <option value="{{ $areaID }}" {{ if eq $areaID $selectedArea }}selected{{ end }}>{{ $areaName }}</option>
         {{ end }}
       </select>
     </form>
+    <p id="area-update-status" class="text-sm mt-2" role="status" aria-live="polite"></p>
   </div>
 
   <!-- 放送局一覧 -->
-  <div class="card-base">
+  <div class="card-base" id="timefree-stations" data-area="{{ $selectedArea }}" aria-live="polite" aria-busy="false">
     <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4">
-      <i class="fas fa-broadcast-tower mr-1"></i> 放送局一覧
+      <i class="fas fa-broadcast-tower mr-1"></i> 放送局一覧（{{ index $areas $selectedArea }}）
     </h2>
     {{ if $stations }}
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -59,11 +60,7 @@
   </div>
 </div>
 
-<script nonce="{{ $.Nonce }}">
-document.getElementById('area-select').addEventListener('change', function() {
-  document.getElementById('area-form').submit();
-});
-</script>
+
 
 {{ end }}
 {{ end }}
