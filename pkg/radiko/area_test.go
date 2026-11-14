@@ -13,6 +13,8 @@ func TestGetAreaIDFromStationID(t *testing.T) {
 	}{
 		{stationID: "TBS", want: "JP13"},
 		{stationID: "OBC", want: "JP27"},
+		{stationID: "FMGUNMA", want: "JP10"},
+		{stationID: "FM-GUNMA", want: "JP10"},
 		{stationID: "HBC", want: "JP1"},
 		{stationID: "UNKNOWN", want: "JP13"},
 	}

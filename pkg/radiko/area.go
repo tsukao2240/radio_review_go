@@ -21,7 +21,7 @@ var stationAreaMap = map[string]string{
 	"CRT": "JP12", "BAYFM78": "JP12",
 	"YFM": "JP14", "FMY": "JP35",
 	"NACK5": "JP11",
-	"CRK":   "JP28", "RCC": "JP34", "FM-GUNMA": "JP10",
+	"CRK":   "JP28", "RCC": "JP34", "FM-GUNMA": "JP10", "FMGUNMA": "JP10",
 	"BSN": "JP15", "FM-NIIGATA": "JP15",
 	"KNB": "JP16",
 	"MRO": "JP17", "HELLO FIVE": "JP17",
