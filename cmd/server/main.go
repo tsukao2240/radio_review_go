@@ -170,6 +170,7 @@ func main() {
 	r.Get("/healthz", healthzHandler(db, rdb))
 	r.Handle("/metrics", promhttp.Handler())
 	r.Get("/api/live", handler.LiveUpdates(db, rdb))
+	r.Get("/api/csrf", appmiddleware.CSRFToken(store))
 	r.Get("/settings", func(w http.ResponseWriter, r *http.Request) {
 		handler.RenderWithBase(w, r, "web/templates/settings/download.html", nil)
 	})

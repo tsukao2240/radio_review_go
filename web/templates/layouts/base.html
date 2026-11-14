@@ -203,23 +203,41 @@
     <!-- App JS (Viteビルド成果物) -->
     <script nonce="{{ .Nonce }}">
     (function() {
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        if (!meta) return;
-        var token = meta.getAttribute('content');
-        var originalFetch = window.fetch;
-        window.fetch = function(input, init) {
-            init = init || {};
-            var method = (init.method || (input && input.method) || 'GET').toUpperCase();
-            if (['POST', 'PUT', 'PATCH', 'DELETE'].indexOf(method) !== -1) {
-                var headers = new Headers(init.headers || (input && input.headers) || {});
-                if (!headers.has('X-CSRF-TOKEN')) {
-                    headers.set('X-CSRF-TOKEN', token);
-                }
-                init.headers = headers;
-            }
-            return originalFetch(input, init);
+        var nativeFetch = window.fetch.bind(window);
+        var refreshing = null;
+        function currentToken() { return document.querySelector('meta[name="csrf-token"]')?.content || ''; }
+        function headersFor(input, init) {
+            var headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+            headers.set('X-CSRF-TOKEN', currentToken());
+            return headers;
+        }
+        async function renewToken() {
+            if (!refreshing) refreshing = nativeFetch('/api/csrf', {cache: 'no-store', credentials: 'same-origin'})
+                .then(function(response) { if (!response.ok) throw new Error('接続情報を更新できません'); return response.json(); })
+                .then(function(data) {
+                    if (!data.csrf_token) throw new Error('接続情報を更新できません');
+                    document.querySelector('meta[name="csrf-token"]').content = data.csrf_token;
+                }).finally(function() { refreshing = null; });
+            return refreshing;
+        }
+        window.fetch = async function(input, init) {
+            init = Object.assign({}, init || {});
+            var method = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+            var url = new URL(input instanceof Request ? input.url : input, location.href);
+            var protectedRequest = url.origin === location.origin && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+            if (!protectedRequest) return nativeFetch(input, init);
+            var retryInput = input instanceof Request ? input.clone() : input;
+            init.headers = headersFor(input, init);
+            var response = await nativeFetch(input, init);
+            if (response.status !== 403 || !(response.headers.get('Content-Type') || '').includes('application/json')) return response;
+            var reason;
+            try { reason = await response.clone().json(); } catch (_) { return response; }
+            if (reason.code !== 'csrf_token_invalid') return response;
+            await renewToken();
+            init.headers = headersFor(retryInput, init);
+            return nativeFetch(retryInput, init);
         };
-        Object.defineProperty(window, 'csrfToken', { value: token, configurable: true });
+        Object.defineProperty(window, 'csrfToken', {get: currentToken, configurable: true});
     })();
     </script>
     <script nonce="{{ .Nonce }}" type="module" src="/static/app.js"></script>
@@ -344,7 +362,7 @@
     })();
     </script>
 <script src="/static/download-settings.js" defer></script>
-<script src="/static/live-updates.js?v=area-auto-20261114" defer></script>
+<script src="/static/live-updates.js?v=csrf-recovery-20261114" defer></script>
 </body>
 </html>
 {{ end }}
