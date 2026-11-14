@@ -71,27 +71,20 @@ func main() {
 
 	// --- Repositories ---
 	userRepo := repository.NewUserRepository(db)
-	postRepo := repository.NewPostRepository(db)
 	programRepo := repository.NewRadioProgramRepository(db)
 	favRepo := repository.NewFavoriteProgramRepository(db)
 	scheduleRepo := repository.NewRecordingScheduleRepository(db)
-	tagRepo := repository.NewPostTagRepository(db)
-	likeRepo := repository.NewPostLikeRepository(db)
-	commentRepo := repository.NewPostCommentRepository(db)
 	notifRepo := repository.NewNotificationRepository(db)
 	pushRepo := repository.NewPushSubscriptionRepository(db)
 
 	// --- Services ---
 	radikoSvc := service.NewRadikoApiService(rdb, programRepo)
 	searchSvc := service.NewRadioProgramSearchService(programRepo, rdb)
-	postSvc := service.NewPostService(postRepo, programRepo, tagRepo)
-	interactionSvc := service.NewPostInteractionService(likeRepo, commentRepo)
 	favSvc := service.NewFavoriteService(favRepo)
 	notifSvc := service.NewNotificationService(notifRepo)
 	pushSvc := service.NewPushServiceFromEnv(pushRepo)
 	notifSvc.SetPushSender(pushSvc)
 	scheduleSvc := service.NewRecordingScheduleService(scheduleRepo)
-	recommendSvc := service.NewRecommendationService(postRepo, programRepo, favRepo, rdb)
 
 	// --- Radiko client ---
 	keyPath := "storage/keys/radiko_auth_key.txt"
@@ -112,16 +105,16 @@ func main() {
 
 	// --- Handlers ---
 	broadcastHandler := handler.NewBroadcastHandler(radikoSvc, searchSvc, programRepo)
-	postHandler := handler.NewPostHandler(postSvc, interactionSvc, store)
-	mypageHandler := handler.NewMypageHandler(postSvc, store)
 	favHandler := handler.NewFavoriteHandler(favSvc, radikoSvc, store)
 	recordingHandler := handler.NewRecordingHandler(radikoClient, hlsDownloader, rdb, storagePath)
 	recordingHandler.SetUserRepository(userRepo)
+	recordingHandler.SetDownloadCompletion(func(ctx context.Context, info *model.RecordingInfo) error {
+		return recordDownloadCompletion(ctx, db, info)
+	})
 	favHandler.SetRecorder(recordingHandler)
 	notifHandler := handler.NewNotificationHandler(notifSvc, store)
 	pushHandler := handler.NewPushHandler(pushSvc)
 	scheduleHandler := handler.NewScheduleHandler(scheduleSvc, store)
-	recommendHandler := handler.NewRecommendationHandler(recommendSvc, store)
 
 	// --- フラッシュメッセージストアの登録 ---
 	handler.FlashStore = store
@@ -176,6 +169,10 @@ func main() {
 	})
 	r.Get("/healthz", healthzHandler(db, rdb))
 	r.Handle("/metrics", promhttp.Handler())
+	r.Get("/api/live", handler.LiveUpdates(db, rdb))
+	r.Get("/settings", func(w http.ResponseWriter, r *http.Request) {
+		handler.RenderWithBase(w, r, "web/templates/settings/download.html", nil)
+	})
 
 	// 古いPWAのログイン画面URLからも、そのままアプリへ移動する。
 	for _, path := range []string{"/login", "/register", "/password/reset"} {
@@ -197,26 +194,6 @@ func main() {
 	r.Get("/list/{station_id}/{title}", broadcastHandler.ShowProgramDetail)
 	r.With(appmiddleware.RateLimit(30, time.Minute)).Get("/search", broadcastHandler.Search)
 
-	// レビュー（公開）
-	r.Get("/program", postHandler.IndexPrograms)
-	r.Get("/review/list", postHandler.ListAllReviews)
-	r.Get("/list/{station_id}/{title}/review", postHandler.ListReviewsByProgram)
-	r.Get("/program/{program_id}/rating", postHandler.GetProgramRating)
-
-	// レビュー（ログイン不要）
-	r.Group(func(r chi.Router) {
-		r.Get("/review/{id}", postHandler.ShowReviewForm)
-		r.With(appmiddleware.RateLimit(10, time.Minute)).Post("/review/{id}", postHandler.CreateReview)
-	})
-
-	// マイページ（ログイン不要）
-	r.Group(func(r chi.Router) {
-		r.Get("/my", mypageHandler.Index)
-		r.Get("/my/edit/{program_id}", mypageHandler.Edit)
-		r.Post("/my/edit/{program_id}", mypageHandler.Update)
-		r.Post("/my", mypageHandler.Destroy)
-	})
-
 	// お気に入り（ログイン不要）
 	r.Group(func(r chi.Router) {
 		r.Get("/favorites", favHandler.Index)
@@ -234,6 +211,7 @@ func main() {
 	r.Get("/recording/status", recordingHandler.GetRecordingStatus(store))
 	r.Get("/recording/stream", recordingHandler.StreamRecording(store))
 	r.Get("/recording/download", recordingHandler.DownloadRecording(store))
+	r.Post("/recording/download/complete", recordingHandler.CompleteSavedDownload(store))
 	r.Get("/recording/feed.xml", recordingHandler.FeedXML)
 	r.Get("/recording/list", recordingHandler.ListRecordings(store))
 	r.Get("/recording/history", recordingHandler.ShowHistory(store))
@@ -256,23 +234,6 @@ func main() {
 		r.Get("/api/push/vapid-public-key", pushHandler.VAPIDPublicKey)
 		r.Post("/api/push/subscribe", pushHandler.Subscribe)
 		r.Delete("/api/push/subscribe", pushHandler.Unsubscribe)
-	})
-
-	// レコメンデーション（ログイン不要）
-	r.Group(func(r chi.Router) {
-		r.Get("/recommendations", recommendHandler.Index)
-		r.Get("/api/recommendations", recommendHandler.GetRecommendations)
-		r.Post("/api/recommendations/refresh", recommendHandler.Refresh)
-	})
-
-	// 投稿インタラクション API（ログイン不要）
-	r.Group(func(r chi.Router) {
-		r.Post("/api/posts/like", postHandler.LikePost)
-		r.Post("/api/posts/unlike", postHandler.UnlikePost)
-		r.With(appmiddleware.RateLimit(20, time.Minute)).Post("/api/posts/comment", postHandler.AddComment)
-		r.Post("/api/posts/comment/delete", postHandler.DeleteComment)
-		r.Get("/api/posts/comments", postHandler.GetComments)
-		r.Get("/api/posts/check-like", postHandler.CheckLike)
 	})
 
 	port := os.Getenv("APP_PORT")
@@ -410,4 +371,13 @@ func getEnvOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func recordDownloadCompletion(ctx context.Context, db *sqlx.DB, info *model.RecordingInfo) error {
+	// 完了行と自動録音の一意キーを残し、Redis消失後も再録音・復元させない。
+	_, err := db.ExecContext(ctx, `UPDATE recording_schedules
+   SET recording_metadata = JSON_SET(COALESCE(recording_metadata, JSON_OBJECT()),
+    '$.status', 'downloaded', '$.file_path', '', '$.downloaded_at', ?), updated_at = NOW()
+   WHERE recording_id = ? AND status = 'completed'`, time.Now().Format(time.RFC3339), info.RecordingID)
+	return err
 }

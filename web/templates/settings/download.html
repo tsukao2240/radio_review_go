@@ -1,0 +1,25 @@
+{{ template "base" . }}
+{{ define "content" }}
+<div class="max-w-3xl mx-auto px-4">
+  <h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6"><i class="fas fa-cog mr-2"></i>設定</h1>
+  <section class="card-base space-y-4" aria-labelledby="download-settings-title">
+    <h2 id="download-settings-title" class="text-lg font-semibold">録音の保存先</h2>
+    <p class="text-sm text-gray-600 dark:text-gray-400">指定したフォルダに録音を直接保存します。保存が完了すると、サーバー上の元の録音を削除します。</p>
+    <div class="rounded-lg bg-gray-100 dark:bg-gray-800 p-4">
+      <p class="text-sm text-gray-500 mb-1">現在の保存先</p>
+      <p id="download-folder-name" class="font-semibold break-all">読み込み中…</p>
+    </div>
+    <div class="flex gap-3 flex-wrap">
+      <button type="button" data-download-setting-action="choose" class="px-4 py-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"><i class="fas fa-folder-open mr-2"></i>保存先フォルダを選択</button>
+      <button type="button" data-download-setting-action="clear" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 disabled:opacity-50">毎回、保存先を選ぶ</button>
+    </div>
+    <p id="download-settings-status" class="text-sm text-gray-600 dark:text-gray-400" role="status" aria-live="polite"></p>
+    <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+      <li>同名ファイルがある場合は番号を付け、上書きしません。</li>
+      <li>このアプリで保存先を記憶します。再起動後などにアクセス許可の確認が出る場合があります。</li>
+      <li>キャンセルや保存失敗では、サーバー上の録音を残します。</li>
+    </ul>
+  </section>
+  <a href="/recording/history" class="inline-flex items-center mt-6 text-primary-500"><i class="fas fa-arrow-left mr-2"></i>録音履歴に戻る</a>
+</div>
+{{ end }}

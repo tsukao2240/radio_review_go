@@ -91,3 +91,5 @@ func IncRecordingJobRun(job string) {
 func IncRecordingJobFailure(job, reason string) {
 	RecordingJobFailuresTotal.WithLabelValues(job, reason).Inc()
 }
+
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }

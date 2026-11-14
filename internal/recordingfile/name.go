@@ -35,9 +35,9 @@ func BaseName(startTime, stationID, programName string) string {
 		title = "recording"
 	}
 	if prefix == "" {
-		prefix = time.Now().Format("2006-01-02_1504")
+		prefix = startPrefix(time.Now().In(time.FixedZone("JST", 9*60*60)).Format("20060102150405"))
 	}
-	return fmt.Sprintf("%s_%s_%s.m4a", prefix, station, title)
+	return fmt.Sprintf("%s_%s_%s.m4a", station, title, prefix)
 }
 
 func DisplayName(infoFilePath, startTime, stationID, programName string) string {
@@ -109,7 +109,16 @@ func startPrefix(startTime string) string {
 	hour := atoi(raw[8:10])
 	minute := atoi(raw[10:12])
 	at := base.Add(time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute)
-	return at.Format("2006-01-02_1504")
+	// Radikoの放送日は午前5時に切り替わる。深夜帯は24〜28時で表す。
+	if minute > 59 || hour > 28 {
+		return ""
+	}
+	broadcastHour := at.Hour()
+	if broadcastHour < 5 {
+		at = at.AddDate(0, 0, -1)
+		broadcastHour += 24
+	}
+	return fmt.Sprintf("%s%02d%02d", at.Format("20060102"), broadcastHour, at.Minute())
 }
 
 func sanitize(s string) string {

@@ -76,8 +76,6 @@ func TestWriteRouteRateLimitsConfigured(t *testing.T) {
 	body := string(src)
 	required := []string{
 		`store.Options.Secure = true`,
-		`RateLimit(10, time.Minute)).Post("/review/{id}"`,
-		`RateLimit(20, time.Minute)).Post("/api/posts/comment"`,
 		`RateLimit(30, time.Minute)).Post("/favorites"`,
 		`RateLimit(30, time.Minute)).Post("/favorites/delete"`,
 		`RateLimit(2, time.Minute)).Post("/favorites/record-all"`,

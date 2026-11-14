@@ -44,9 +44,9 @@
                 data-stream-url="/recording/stream?recording_id={{ .RecordingID }}">
           <i class="fas fa-play mr-1"></i>再生
         </button>
-        <a href="/recording/download?recording_id={{ .RecordingID }}"
+        <a href="/recording/download?recording_id={{ .RecordingID }}" data-download-name="{{ .FilePath }}"
            class="inline-flex items-center text-sm px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition">
-          <i class="fas fa-download mr-1"></i>ダウンロード
+          <i class="fas fa-download mr-1"></i>ダウンロード（保存後削除）
         </a>
         <button class="delete-recording-btn text-sm px-3 py-1.5 border border-red-300 dark:border-red-700 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
                 data-recording-id="{{ .RecordingID }}"
@@ -102,64 +102,6 @@
 
 <script nonce="{{ $.Nonce }}">
 document.addEventListener('DOMContentLoaded', function() {
-    var pollingCards = document.querySelectorAll('[data-polling="true"]');
-    if (pollingCards.length > 0) {
-        var timers = [];
-        pollingCards.forEach(function(card) {
-            var recordingId = card.dataset.recordingId;
-            if (!recordingId) return;
-
-            var timerId = setInterval(function() {
-                fetch('/recording/status?recording_id=' + encodeURIComponent(recordingId))
-                    .then(function(r) {
-                        if (!r.ok) { clearInterval(timerId); return null; }
-                        return r.json();
-                    })
-                    .then(function(data) {
-                        if (!data) return;
-                        if (data.status === 'recording') return;
-
-                        clearInterval(timerId);
-                        var statusEl = card.querySelector('.recording-status');
-                        var actionEl = card.querySelector('.text-sm.text-gray-500');
-
-                        if (data.status === 'completed') {
-                            if (statusEl) {
-                                statusEl.className = 'recording-status inline-flex items-center text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full font-medium';
-                                statusEl.innerHTML = '<i class="fas fa-check-circle mr-1"></i>完了';
-                            }
-                            if (actionEl) {
-                                actionEl.outerHTML =
-                                    '<div class="recording-actions flex gap-2">' +
-                                    '<a href="/recording/download?recording_id=' + encodeURIComponent(recordingId) + '"' +
-                                    ' class="inline-flex items-center text-sm px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition">' +
-                                    '<i class="fas fa-download mr-1"></i>ダウンロード</a>' +
-                                    '</div>';
-                            }
-                            if (window.toast) window.toast.success('録音が完了しました');
-                        } else {
-                            if (statusEl) {
-                                statusEl.className = 'recording-status inline-flex items-center text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full font-medium';
-                                statusEl.textContent = data.status;
-                            }
-                            if (actionEl) {
-                                if (data.status === 'failed' && data.fail_reason) {
-                                    actionEl.className = 'text-sm text-red-600 dark:text-red-400 break-words';
-                                    actionEl.textContent = data.fail_reason;
-                                } else {
-                                    actionEl.remove();
-                                }
-                            }
-                            if (window.toast) window.toast.error('録音に失敗しました');
-                        }
-                        card.removeAttribute('data-polling');
-                    })
-                    .catch(function() { clearInterval(timerId); });
-            }, 10000);
-            timers.push(timerId);
-        });
-    }
-
     document.querySelectorAll('.delete-recording-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             const recordingId = this.dataset.recordingId;
@@ -181,7 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(function(data) {
                 if (!data.error) {
                     window.toast ? window.toast.success('録音ファイルを削除しました') : alert('録音ファイルを削除しました');
-                    location.reload();
+                    window.radioLive ? window.radioLive.refresh() : location.reload();
                 } else {
                     window.toast ? window.toast.error('削除に失敗しました: ' + data.error) : alert('削除に失敗しました: ' + data.error);
                 }
@@ -202,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!container.classList.contains('hidden')) {
                     var audio = container.querySelector('audio');
                     if (audio && audio.paused) {
-                        audio.play();
+                        audio.play().catch(function(error) { if (error.name !== 'AbortError' && window.toast) window.toast.error('音声を再生できません'); });
                     }
                 }
             }
@@ -223,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 { src: '/static/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' }
             ]
         });
-        navigator.mediaSession.setActionHandler('play', function() { audio.play(); });
+        navigator.mediaSession.setActionHandler('play', function() { audio.play().catch(function(error) { if (error.name !== 'AbortError' && window.toast) window.toast.error('音声を再生できません'); }); });
         navigator.mediaSession.setActionHandler('pause', function() { audio.pause(); });
         navigator.mediaSession.setActionHandler('seekbackward', function(details) {
             audio.currentTime = Math.max(audio.currentTime - (details.seekOffset || 10), 0);
@@ -241,6 +183,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.querySelectorAll('.recording-audio').forEach(function(audio) {
+        if (audio.dataset.mediaBound) return;
+        audio.dataset.mediaBound = 'true';
         audio.addEventListener('play', function() { setupMediaSession(audio); });
     });
 
@@ -262,7 +206,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    if (navigator.serviceWorker) {
+    if (navigator.serviceWorker && !window.radioHistorySWBound) {
+        window.radioHistorySWBound = true;
         navigator.serviceWorker.addEventListener('message', function(event) {
             if (!event.data || !event.data.type) return;
             if (event.data.type === 'RECORDING_CACHED' || event.data.type === 'RECORDING_CACHE_FAILED') {

@@ -26,7 +26,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Radio Review">
-    <meta name="description" content="ラジオ番組のレビューと録音管理アプリケーション">
+    <meta name="description" content="ラジオ番組の検索・お気に入り・録音管理アプリケーション">
 
     <!-- PWA Icons -->
     <link rel="manifest" href="/manifest.json">
@@ -89,15 +89,13 @@
                         <a href="/favorites" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-heart mr-2"></i>お気に入り
                         </a>
-                        <a href="/review/list" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
-                            <i class="fas fa-book-open mr-2"></i>レビュー
-                        </a>
 
                         <!-- 通知 -->
                         <a href="/notifications" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-bell mr-2"></i>通知
                         </a>
 
+                        <a href="/settings" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm"><i class="fas fa-cog mr-2"></i>設定</a>
                         <!-- ユーザーメニュー（ドロップダウン） -->
                         <div class="relative ml-2 group">
                             <button class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
@@ -106,9 +104,6 @@
                                 <i class="fas fa-chevron-down ml-2"></i>
                             </button>
                             <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-2 invisible group-hover:visible transition-all">
-                                <a href="/my" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-                                    <i class="fas fa-user mr-2"></i>マイページ
-                                </a>
                                 <a href="/recording/schedules" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                                     <i class="fas fa-calendar-check mr-2"></i>録音予約
                                 </a>
@@ -116,9 +111,6 @@
                             </div>
                         </div>
                         {{ else }}
-                        <a href="/review/list" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
-                            <i class="fas fa-book-open mr-2"></i>レビュー
-                        </a>
                         <a href="/login" class="touch-target text-white hover:bg-white/10 rounded-lg px-3 py-2 transition flex items-center text-sm">
                             <i class="fas fa-sign-in-alt mr-2"></i>ログイン
                         </a>
@@ -159,16 +151,10 @@
                     <a href="/recording/history" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                         <i class="fas fa-microphone mr-3"></i>録音履歴
                     </a>
-                    <a href="/review/list" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
-                        <i class="fas fa-book-open mr-3"></i>レビューを見る
-                    </a>
 
                     {{ if .User }}
                     <div class="border-t border-white/20 pt-4 mt-4">
-                        <p class="text-white/70 text-sm px-4 mb-2">メニュー</p>
-                        <a href="/my" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
-                            <i class="fas fa-user mr-3"></i>マイページ
-                        </a>
+                        <p class="text-white/70 text-sm px-4 mb-2">メニュー</p><a href="/settings" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition"><i class="fas fa-cog mr-3"></i>設定</a>
                         <a href="/recording/schedules" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-calendar-check mr-3"></i>録音予約
                         </a>
@@ -177,9 +163,6 @@
                         </a>
                         <a href="/notifications" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
                             <i class="fas fa-bell mr-3"></i>通知
-                        </a>
-                        <a href="/program" class="block touch-target text-white hover:bg-white/10 rounded-lg px-4 py-3 transition">
-                            <i class="fas fa-pen-square mr-3"></i>レビューを投稿
                         </a>
                     </div>
                     {{ end }}
@@ -360,6 +343,8 @@
         if (overlay) overlay.addEventListener('click', closeMenu);
     })();
     </script>
+<script src="/static/download-settings.js" defer></script>
+<script src="/static/live-updates.js" defer></script>
 </body>
 </html>
 {{ end }}

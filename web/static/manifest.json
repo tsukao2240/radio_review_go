@@ -1,7 +1,7 @@
 {
   "name": "ラジオレビュー",
   "short_name": "ラジオレビュー",
-  "description": "ラジオ番組の検索・レビュー・録音アプリ。放送中の番組をチェックし、タイムフリー録音や番組レビューができます。",
+  "description": "ラジオ番組の検索・お気に入り・録音管理",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -58,7 +58,11 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["entertainment", "music", "news"],
+  "categories": [
+    "entertainment",
+    "music",
+    "news"
+  ],
   "share_target": {
     "action": "/search",
     "method": "GET",

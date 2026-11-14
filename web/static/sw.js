@@ -67,7 +67,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname === '/recording/stream' || url.pathname === '/recording/download') {
+  if (url.pathname === '/recording/download') {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
+  if (url.pathname === '/recording/stream') {
     event.respondWith(recordingCacheResponse(request));
     return;
   }

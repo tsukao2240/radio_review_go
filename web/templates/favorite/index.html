@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(function(data) {
                 if (!data.error) {
                     window.toast ? window.toast.success('お気に入りから削除しました') : null;
-                    location.reload();
+                    window.radioLive ? window.radioLive.refresh() : location.reload();
                 } else {
                     window.toast ? window.toast.error('削除に失敗しました: ' + data.error) : alert('削除に失敗しました: ' + data.error);
                 }
@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     alert(message);
                 }
                 if (data.started > 0) {
-                    setTimeout(function() { window.location.href = '/recording/history'; }, 2000);
+                    window.location.href = '/recording/history';
                 }
             })
             .catch(function(error) {
@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 if (data.success) {
                     if (window.toast) window.toast.success('録音を開始しました。録音履歴ページで進捗を確認できます。');
-                    setTimeout(function() { window.location.href = '/recording/history'; }, 2000);
+                    window.location.href = '/recording/history';
                 } else {
                     var message = data.message || data.error || '録音の開始に失敗しました';
                     window.toast ? window.toast.error('エラー: ' + message) : alert('エラー: ' + message);

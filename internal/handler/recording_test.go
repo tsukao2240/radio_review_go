@@ -297,7 +297,7 @@ func TestStartTimefree_CoreStoresOwnerAndStartsDownload(t *testing.T) {
 	if info.OwnerKey != "user_9" || info.ProgramName != "Core Show" || info.Status != "recording" {
 		t.Fatalf("stored info = %#v", info)
 	}
-	if !strings.Contains(filepath.Base(info.FilePath), "2024-01-01_1000_OBC_Core Show.m4a") {
+	if !strings.Contains(filepath.Base(info.FilePath), "OBC_Core Show_202401011000.m4a") {
 		t.Fatalf("file path = %q", info.FilePath)
 	}
 

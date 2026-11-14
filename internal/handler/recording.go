@@ -28,11 +28,12 @@ import (
 
 // RecordingHandler は録音関連のHTTPハンドラーを管理する。
 type RecordingHandler struct {
-	radikoClient  radiko.ClientInterface
-	hlsDownloader radiko.HLSDownloaderInterface
-	redisClient   *redis.Client
-	storagePath   string
-	userRepo      repository.UserRepositoryInterface
+	downloadCompletion func(context.Context, *model.RecordingInfo) error
+	radikoClient       radiko.ClientInterface
+	hlsDownloader      radiko.HLSDownloaderInterface
+	redisClient        *redis.Client
+	storagePath        string
+	userRepo           repository.UserRepositoryInterface
 }
 
 type recordingRSS struct {
@@ -431,10 +432,39 @@ func (h *RecordingHandler) DownloadRecording(store sessions.Store) http.HandlerF
 		}
 		defer func() { _ = f.Close() }()
 
+		receiptBytes := make([]byte, 32)
+		if _, err := rand.Read(receiptBytes); err != nil {
+			writeError(w, http.StatusInternalServerError, "ダウンロードの準備に失敗しました")
+			return
+		}
+		receipt := hex.EncodeToString(receiptBytes)
+		w.Header().Set("X-Download-Receipt", receipt)
 		downloadName := recordingfile.DisplayName(info.FilePath, info.StartTime, info.StationID, info.ProgramName)
 		w.Header().Set("Content-Type", recordingfile.ContentType(info.FilePath))
 		w.Header().Set("Content-Disposition", recordingfile.AttachmentDisposition(downloadName))
-		http.ServeContent(w, r, downloadName, time.Time{}, f)
+		w.Header().Set("Cache-Control", "no-store")
+		stat, err := f.Stat()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "録音ファイルの確認に失敗しました")
+			return
+		}
+		sent := &downloadResponseWriter{ResponseWriter: w}
+		http.ServeContent(sent, r, downloadName, time.Time{}, f)
+		// 部分取得、HEAD、切断、送信失敗では保存ファイルを保持する。
+		if h.downloadCompletion == nil || r.Method != http.MethodGet || r.Header.Get("Range") != "" ||
+			sent.status != http.StatusOK || sent.failed || sent.written != stat.Size() || r.Context().Err() != nil {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		// 全量送信の証明だけを保存する。音声の削除は端末への保存完了通知後。
+		delivered, err := json.Marshal(info)
+		if err != nil {
+			return
+		}
+		if err := h.redisClient.Set(cleanupCtx, downloadReceiptKey(recordingID, receipt), string(delivered), 30*time.Minute).Err(); err != nil {
+			log.Printf("DownloadRecording: receipt save failed recording_id=%s: %v", recordingID, err)
+		}
 	}
 }
 
@@ -734,3 +764,37 @@ func (h *RecordingHandler) DeleteRecording(store sessions.Store) http.HandlerFun
 		})
 	}
 }
+
+// SetDownloadCompletion configures durable completion tracking before file removal.
+func (h *RecordingHandler) SetDownloadCompletion(fn func(context.Context, *model.RecordingInfo) error) {
+	h.downloadCompletion = fn
+}
+
+type downloadResponseWriter struct {
+	http.ResponseWriter
+	status  int
+	written int64
+	failed  bool
+}
+
+func (w *downloadResponseWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *downloadResponseWriter) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	n, err := w.ResponseWriter.Write(data)
+	w.written += int64(n)
+	if err != nil || n != len(data) {
+		w.failed = true
+	}
+	return n, err
+}
+
+func (w *downloadResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

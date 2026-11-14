@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(function (res) { return res.json(); })
         .then(function (data) {
             if (data.success) {
-                location.reload();
+                window.radioLive ? window.radioLive.refresh() : location.reload();
             } else {
                 window.toast ? window.toast.error('更新に失敗しました') : alert('更新に失敗しました');
                 btn.disabled = false;

@@ -4,7 +4,6 @@
 {{ with .Data }}
 {{ $entries := index . "Entries" }}
 {{ $latestBroadcast := index . "LatestBroadcast" }}
-{{ $programID := index . "ProgramID" }}
 {{ $stationID := index . "StationID" }}
 {{ $programTitle := index . "ProgramTitle" }}
 {{ $dateParam := index . "DateParam" }}
@@ -87,30 +86,6 @@
   </div>
   {{ end }}
 
-  <!-- レビューボタン -->
-  <div class="flex gap-2">
-    {{ if $programID }}
-      {{ if $.User }}
-      <a href="/review/{{ $programID }}"
-         class="flex-1 text-center py-2 bg-gray-800 dark:bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition text-sm">
-        <i class="fas fa-pen mr-1"></i> レビューを投稿する
-      </a>
-      {{ else }}
-      <a href="/login"
-         class="flex-1 text-center py-2 bg-gray-800 dark:bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-700 dark:hover:bg-gray-600 transition text-sm">
-        <i class="fas fa-pen mr-1"></i> レビューを投稿する
-      </a>
-      {{ end }}
-    {{ else }}
-    <div class="flex-1 p-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg">
-      <i class="fas fa-info-circle mr-1"></i> この番組はまだ登録されていません
-    </div>
-    {{ end }}
-    <a href="/list/{{ $stationID }}/{{ urlpathesc $programTitle }}/review"
-       class="flex-1 text-center py-2 border-2 border-gray-700 dark:border-gray-500 text-gray-700 dark:text-gray-300 font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm">
-      <i class="fas fa-list mr-1"></i> レビューを見る
-    </a>
-  </div>
 
 </div>
 {{ end }}
@@ -214,7 +189,7 @@
       .then(function(data) {
         if (data.success) {
           if (window.toast) window.toast.success('録音を開始しました。録音履歴ページで進捗を確認できます。');
-          setTimeout(function() { window.location.href = '/recording/history'; }, 2000);
+          window.location.href = '/recording/history';
         } else {
           if (window.toast) window.toast.error('エラー: ' + (data.message || '録音の開始に失敗しました'));
         }
